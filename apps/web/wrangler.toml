@@ -1,0 +1,6 @@
+name = "qraft-web"
+pages_build_output_dir = "public"
+compatibility_date = "2026-07-29"
+
+[vars]
+API_ORIGIN = "https://api.quiz.example.com"

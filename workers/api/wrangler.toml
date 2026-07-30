@@ -1,0 +1,29 @@
+name = "qraft-api"
+main = "src/index.js"
+compatibility_date = "2026-07-29"
+workers_dev = false
+routes = [{ pattern = "api.quiz.example.com", custom_domain = true }]
+
+[vars]
+ENVIRONMENT = "production"
+ALLOWED_ORIGINS = "https://quiz.example.com"
+ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
+ACCESS_AUD = "replace-with-access-application-aud"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "qraft-production"
+database_id = "replace-with-d1-database-id"
+migrations_dir = "../../migrations"
+
+[[ratelimits]]
+name = "ATTEMPT_RATE_LIMIT"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[observability]
+enabled = true
+head_sampling_rate = 0.1

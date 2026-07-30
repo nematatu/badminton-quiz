@@ -1,0 +1,12 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.quiz.example.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Cache-Control: no-cache
+
+/styles.css
+  Cache-Control: public, max-age=86400
+/app.js
+  Cache-Control: public, max-age=86400
