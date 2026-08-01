@@ -31,7 +31,7 @@ async function quizWithQuestions(env, idOrSlug, includeAnswers) {
   const quiz = await env.DB.prepare('SELECT * FROM quizzes WHERE id = ?1 OR slug = ?1').bind(idOrSlug).first();
   if (!quiz) return null;
   const { results } = await env.DB.prepare('SELECT id, position, prompt, explanation, options_json, correct_index FROM questions WHERE quiz_id = ? ORDER BY position').bind(quiz.id).all();
-  return { id: quiz.id, slug: quiz.slug, title: quiz.title, description: quiz.description, status: quiz.status, version:quiz.version, updatedAt: quiz.updated_at, questions: results.map(q => ({ id:q.id, prompt:q.prompt, options:JSON.parse(q.options_json), ...(includeAnswers ? { correctIndex:q.correct_index, explanation:q.explanation } : {}) })) };
+  return { id: quiz.id, slug: quiz.slug, title: quiz.title, description: quiz.description, timeLimitSeconds:quiz.time_limit_seconds, status: quiz.status, version:quiz.version, updatedAt: quiz.updated_at, questions: results.map(q => ({ id:q.id, prompt:q.prompt, options:JSON.parse(q.options_json), ...(includeAnswers ? { correctIndex:q.correct_index, explanation:q.explanation } : {}) })) };
 }
 
 function audit(env, actor, action, quizId, metadata = {}) {
@@ -44,6 +44,7 @@ export default {
     const cors = corsHeaders(request, env);
     try {
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+      if (path === '/' && env.ENVIRONMENT === 'development') return Response.redirect('http://localhost:3000', 302);
       if (path === '/health') return json({ ok:true, environment:env.ENVIRONMENT }, 200, { 'Cache-Control':'no-cache', ...cors });
 
       if (path === '/v1/quizzes' && request.method === 'GET') {
@@ -80,7 +81,7 @@ export default {
         const id = crypto.randomUUID(), now = new Date().toISOString();
         const slug = `${slugify(input.title)}-${id.slice(0, 6)}`;
         const actor = identity.email || identity.sub;
-        const statements = [env.DB.prepare('INSERT INTO quizzes(id,slug,title,description,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').bind(id,slug,input.title,input.description,'draft',actor,now,now), ...input.questions.map(q => env.DB.prepare('INSERT INTO questions(id,quiz_id,position,prompt,explanation,options_json,correct_index) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),id,q.position,q.prompt,q.explanation,JSON.stringify(q.options),q.correctIndex)), audit(env,actor,'quiz.create',id,{ title:input.title })];
+        const statements = [env.DB.prepare('INSERT INTO quizzes(id,slug,title,description,time_limit_seconds,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,slug,input.title,input.description,input.timeLimitSeconds,'draft',actor,now,now), ...input.questions.map(q => env.DB.prepare('INSERT INTO questions(id,quiz_id,position,prompt,explanation,options_json,correct_index) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),id,q.position,q.prompt,q.explanation,JSON.stringify(q.options),q.correctIndex)), audit(env,actor,'quiz.create',id,{ title:input.title })];
         await env.DB.batch(statements);
         return json(await quizWithQuestions(env,id,true), 201);
       }
@@ -96,7 +97,7 @@ export default {
         const raw = await body(request);
         if (!Number.isInteger(raw.version) || raw.version !== existing.version) return json({ error:'edit_conflict', currentVersion:existing.version },409);
         const input = validateQuiz(raw); const now = new Date().toISOString(); const actor = identity.email || identity.sub;
-        const updated = await env.DB.prepare('UPDATE quizzes SET title=?,description=?,updated_at=?,version=version+1 WHERE id=? AND version=?').bind(input.title,input.description,now,id,raw.version).run();
+        const updated = await env.DB.prepare('UPDATE quizzes SET title=?,description=?,time_limit_seconds=?,updated_at=?,version=version+1 WHERE id=? AND version=?').bind(input.title,input.description,input.timeLimitSeconds,now,id,raw.version).run();
         if (!updated.meta.changes) return json({ error:'edit_conflict' },409);
         const statements = [env.DB.prepare('DELETE FROM questions WHERE quiz_id=?').bind(id), ...input.questions.map(q => env.DB.prepare('INSERT INTO questions(id,quiz_id,position,prompt,explanation,options_json,correct_index) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),id,q.position,q.prompt,q.explanation,JSON.stringify(q.options),q.correctIndex)), audit(env,actor,'quiz.update',id,{ fromVersion:raw.version })];
         await env.DB.batch(statements); return json(await quizWithQuestions(env,id,true));

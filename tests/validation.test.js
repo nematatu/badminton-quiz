@@ -8,6 +8,13 @@ test('valid quiz is normalized', () => {
   const result = validateQuiz(valid);
   assert.equal(result.questions.length, 1);
   assert.equal(result.questions[0].position, 0);
+  assert.equal(result.timeLimitSeconds, null);
+});
+
+test('validates optional quiz time limit', () => {
+  assert.equal(validateQuiz({ ...valid, timeLimitSeconds:60 }).timeLimitSeconds, 60);
+  assert.throws(() => validateQuiz({ ...valid, timeLimitSeconds:9 }), /invalid_time_limit/);
+  assert.throws(() => validateQuiz({ ...valid, timeLimitSeconds:3601 }), /invalid_time_limit/);
 });
 
 test('requires exactly four distinct non-empty choices', () => {
@@ -24,4 +31,6 @@ test('answer count and bounds must match quiz', () => {
   assert.deepEqual(validateAnswers({ answers:[0,3] },2),[0,3]);
   assert.throws(() => validateAnswers({ answers:[0] },2), /invalid_answers/);
   assert.throws(() => validateAnswers({ answers:[7,0] },2), /invalid_answers/);
+  assert.deepEqual(validateAnswers({ answers:[-1,2], timedOut:true },2),[-1,2]);
+  assert.throws(() => validateAnswers({ answers:[-1,2] },2), /invalid_answers/);
 });

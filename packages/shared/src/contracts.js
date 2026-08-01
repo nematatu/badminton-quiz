@@ -1,2 +1,2 @@
 export const QUIZ_STATUS = Object.freeze({ DRAFT: 'draft', PUBLISHED: 'published', ARCHIVED: 'archived' });
-export const LIMITS = Object.freeze({ title: 80, description: 280, questions: 50, question: 300, option: 160 });
+export const LIMITS = Object.freeze({ title: 80, description: 280, questions: 50, question: 300, option: 160, timeLimitSeconds: { min: 10, max: 3600 } });

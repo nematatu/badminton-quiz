@@ -23,8 +23,11 @@ APIを起動する前に `.dev.vars` とローカルD1を用意します。
 
 ```sh
 npx wrangler d1 migrations apply qraft-production --local --config workers/api/wrangler.toml
-npm run dev:api
+npm run dev
 ```
+
+`npm run dev` はローカルAPI Workerと公開画面を起動します。公開画面は
+`http://localhost:3000`、APIは `http://localhost:8787` です。
 
 ## Cloudflare初期構築
 

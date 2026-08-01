@@ -4,9 +4,11 @@
   "type": "module",
   "workspaces": ["apps/*", "workers/*", "packages/*"],
   "scripts": {
+    "dev": "node scripts/dev.js",
     "test": "node --test tests/*.test.js",
     "check": "node --check workers/api/src/index.js && node --check apps/admin/public/app.js && node --check apps/web/public/app.js",
     "dev:api": "wrangler dev --config workers/api/wrangler.toml",
+    "dev:web": "wrangler pages dev apps/web/public --port 3000",
     "deploy:api": "wrangler deploy --config workers/api/wrangler.toml",
     "deploy:admin": "wrangler pages deploy --config apps/admin/wrangler.toml",
     "deploy:web": "wrangler pages deploy --config apps/web/wrangler.toml"
