@@ -1,7 +1,10 @@
+# qraft-admin: 管理画面（Cloudflare Pages）。custom domain を Cloudflare Access で保護する。
 name = "qraft-admin"
 pages_build_output_dir = "public"
 compatibility_date = "2026-07-29"
 
+# 管理APIは qraft-api の名前付きエントリポイント AdminApi にだけ存在する。
 [[services]]
 binding = "API"
 service = "qraft-api"
+entrypoint = "AdminApi"

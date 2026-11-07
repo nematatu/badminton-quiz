@@ -2,16 +2,30 @@
   "name": "qraft",
   "private": true,
   "type": "module",
-  "workspaces": ["apps/*", "workers/*", "packages/*"],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "node scripts/dev.js",
-    "test": "node --test tests/*.test.js",
-    "check": "node --check workers/api/src/index.js && node --check apps/admin/public/app.js && node --check apps/web/public/app.js",
-    "dev:api": "wrangler dev --config workers/api/wrangler.toml",
-    "dev:web": "wrangler pages dev apps/web/public --port 3000",
+    "sync:shared": "node scripts/sync-shared.js",
+    "check": "node scripts/sync-shared.js --check && node scripts/check-syntax.js",
+    "test": "node --test --test-concurrency=1 \"tests/*.test.js\"",
+    "verify": "npm run check && npm test && npm run build:api && npm run build:admin",
+    "e2e": "node scripts/e2e.js",
+    "build:api": "wrangler deploy --dry-run --config workers/api/wrangler.toml --outdir .wrangler/build/api",
+    "build:admin": "wrangler pages functions build apps/admin/functions --project-directory apps/admin --outdir .wrangler/build/admin",
+    "preflight": "node scripts/preflight.js",
+    "db:migrate:local": "wrangler d1 migrations apply qraft-production --local --config workers/api/wrangler.toml",
+    "db:migrate:remote": "wrangler d1 migrations apply qraft-production --remote --config workers/api/wrangler.toml",
+    "predeploy:api": "npm run preflight",
     "deploy:api": "wrangler deploy --config workers/api/wrangler.toml",
-    "deploy:admin": "wrangler pages deploy --config apps/admin/wrangler.toml",
-    "deploy:web": "wrangler pages deploy --config apps/web/wrangler.toml"
+    "predeploy:admin": "npm run preflight",
+    "deploy:admin": "wrangler pages deploy --cwd apps/admin",
+    "predeploy:web": "npm run preflight",
+    "deploy:web": "wrangler pages deploy --cwd apps/web"
   },
-  "devDependencies": { "wrangler": "^4.26.0" }
+  "devDependencies": {
+    "miniflare": "^5.20261104.0-beta",
+    "wrangler": "^4.158.0"
+  }
 }

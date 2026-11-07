@@ -1,1 +1,45 @@
-<!doctype html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Qraftで4択クイズに挑戦しよう。"><meta name="theme-color" content="#f7f7f5"><title>Qraft</title><link rel="stylesheet" href="styles.css"></head><body><header><a href="/" class="brand"><span class="logo">Q</span><span>Qraft</span></a><span class="edition">4択クイズ</span></header><main id="app"><div class="loading">読み込み中…</div></main><footer><b>Qraft</b><span>4択クイズを楽しもう</span></footer><div id="toast" role="status"></div><script src="config.js"></script><script src="app.js" type="module"></script></body></html>
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Qraft — 4択クイズ</title>
+    <meta name="description" content="Qraftで4択クイズに挑戦しよう。全問答えると採点と解説が表示されます。">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#151815" media="(prefers-color-scheme: dark)">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Qraft">
+    <meta property="og:title" content="Qraft — 4択クイズ">
+    <meta property="og:description" content="4つの選択肢からひとつ。クイズに挑戦して結果をシェアしよう。">
+    <meta name="twitter:card" content="summary">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="modulepreload" href="/js/app.js">
+    <link rel="modulepreload" href="/js/api.js">
+    <link rel="modulepreload" href="/js/session.js">
+    <link rel="modulepreload" href="/js/views.js">
+    <link rel="modulepreload" href="/config.js">
+    <link rel="modulepreload" href="/shared/contracts.js">
+    <link rel="modulepreload" href="/shared/dom.js">
+    <script type="module" src="/js/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#app">本文へ移動</a>
+    <header class="site-header">
+      <a href="#/" class="brand" aria-label="Qraft ホーム">
+        <span class="logo" aria-hidden="true">Q</span>
+        <span>Qraft</span>
+      </a>
+      <span class="tagline">4択クイズ</span>
+    </header>
+    <main id="app" tabindex="-1">
+      <noscript><p class="status-view">このサービスを利用するには JavaScript を有効にしてください。</p></noscript>
+    </main>
+    <footer class="site-footer">
+      <span><b>Qraft</b> 4択クイズを楽しもう</span>
+    </footer>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="announcer" class="visually-hidden" aria-live="assertive"></div>
+  </body>
+</html>

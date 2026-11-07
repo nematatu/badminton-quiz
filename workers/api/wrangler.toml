@@ -1,3 +1,5 @@
+# qraft-api: 公開API（default export）と管理API（AdminApi エントリポイント）。
+# 「REPLACE」を含む値はデプロイ前に実値へ置き換える。`npm run preflight` が残りを検出する。
 name = "qraft-api"
 main = "src/index.js"
 compatibility_date = "2026-07-29"
@@ -6,16 +8,19 @@ routes = [{ pattern = "api.quiz.example.com", custom_domain = true }]
 
 [vars]
 ENVIRONMENT = "production"
+# 公開画面の Origin。カンマ区切りで完全一致のみ許可する。
 ALLOWED_ORIGINS = "https://quiz.example.com"
-ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
-ACCESS_AUD = "replace-with-access-application-aud"
+# Cloudflare Access の team domain と、Admin 用 Access Application の AUD。
+ACCESS_TEAM_DOMAIN = "https://REPLACE-team.cloudflareaccess.com"
+ACCESS_AUD = "REPLACE-with-access-application-aud"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "qraft-production"
-database_id = "replace-with-d1-database-id"
+database_id = "REPLACE-with-d1-database-id"
 migrations_dir = "../../migrations"
 
+# 回答送信の簡易レート制限（quiz × 接続元IP）。namespace_id はアカウント内で一意な正整数。
 [[ratelimits]]
 name = "ATTEMPT_RATE_LIMIT"
 namespace_id = "1001"

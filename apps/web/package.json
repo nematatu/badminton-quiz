@@ -1,0 +1,6 @@
+{
+  "name": "qraft-web",
+  "private": true,
+  "type": "module",
+  "description": "Qraft 公開画面（Cloudflare Pages）。wrangler がこのディレクトリをプロジェクトのルートとして扱うために必要。"
+}

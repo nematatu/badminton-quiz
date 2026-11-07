@@ -1,0 +1,6 @@
+{
+  "name": "qraft-admin",
+  "private": true,
+  "type": "module",
+  "description": "Qraft 管理画面（Cloudflare Pages）。wrangler がこのディレクトリをプロジェクトのルートとして扱うために必要。"
+}
