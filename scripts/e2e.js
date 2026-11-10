@@ -111,6 +111,14 @@ for (const [name, options] of [
   await page.getByRole('timer').waitFor();
   await shot(page, `web-${name}-question`);
 
+  // 「本文へ移動」を使っても回答中の画面（URL と状態）はそのまま
+  const hashBefore = await page.evaluate(() => location.hash);
+  await page.locator('.skip-link').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => location.hash), hashBefore);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'app');
+  await page.getByRole('heading', { name: '空の色は？' }).waitFor();
+
   // 1問目はキーボード（1キー=青）で、2問目はクリックで回答する
   await page.keyboard.press('1');
   await page.getByRole('button', { name: '次の問題へ' }).click();

@@ -1,5 +1,5 @@
 import { QUIZ_STATUS, errorMessage } from '../shared/contracts.js';
-import { createToast, h, mount } from '../shared/dom.js';
+import { createToast, h, installSkipLink, mount } from '../shared/dom.js';
 import * as api from './api.js';
 import { createEditor } from './editor.js';
 import { listView } from './list.js';
@@ -189,4 +189,5 @@ document.addEventListener('keydown', event => {
   }
 });
 
+installSkipLink(document.querySelector('.skip-link'), root);
 route();

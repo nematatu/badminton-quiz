@@ -40,5 +40,11 @@ test('slugFor: 日本語を含むタイトルから公開URL用の slug を作�
   assert.equal(slugFor('日本の雑学 2026！', id), '日本の雑学-2026-1a2b3c4d');
   assert.equal(slugFor('々・𠮷野家', id), '々-𠮷野家-1a2b3c4d');
   assert.equal(slugFor('!!!', id), 'quiz-1a2b3c4d');
-  for (const title of ['日本の雑学 2026！', 'A'.repeat(200), '!!!']) assert.match(slugFor(title, id), SLUG_PATTERN);
+  // 48文字目がサロゲートペアでも途中で切れない
+  assert.equal(slugFor(`${'a'.repeat(47)}𠮷𠮷`, id), `${'a'.repeat(47)}𠮷-1a2b3c4d`);
+  for (const title of ['日本の雑学 2026！', 'A'.repeat(200), '!!!', `${'a'.repeat(47)}𠮷`, '𠮷'.repeat(60)]) {
+    const slug = slugFor(title, id);
+    assert.match(slug, SLUG_PATTERN);
+    assert.doesNotThrow(() => encodeURIComponent(slug));
+  }
 });

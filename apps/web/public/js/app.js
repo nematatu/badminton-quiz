@@ -1,5 +1,5 @@
 import { errorMessage } from '../shared/contracts.js';
-import { copyText, createToast, mount } from '../shared/dom.js';
+import { copyText, createToast, installSkipLink, mount } from '../shared/dom.js';
 import { fetchQuiz, fetchQuizzes, submitAttempt } from './api.js';
 import { QuizSession, formatDuration } from './session.js';
 import { errorView, homeView, introView, loadingView, questionView, quizHref, resultView } from './views.js';
@@ -187,4 +187,5 @@ function route() {
 }
 
 window.addEventListener('hashchange', route);
+installSkipLink(document.querySelector('.skip-link'), root);
 route();

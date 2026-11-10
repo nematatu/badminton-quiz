@@ -16,13 +16,13 @@ const conflict = currentVersion => new HttpError(409, 'edit_conflict', { detail:
 
 /** タイトルから URL 用の slug を作る。末尾に ID の一部を付けて一意にする。 */
 export function slugFor(title, id) {
-  const base = title
+  const words = title
     .normalize('NFKC')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48)
-    .replace(/-+$/, '');
+    .replace(/^-+|-+$/g, '');
+  // UTF-16 単位で切るとサロゲートペア（𠮷 など）の途中で切れるため、コードポイント単位で切る。
+  const base = Array.from(words).slice(0, 48).join('').replace(/-+$/, '');
   const suffix = id.replace(/-/g, '').slice(0, 8);
   return base ? `${base}-${suffix}` : `quiz-${suffix}`;
 }

@@ -48,6 +48,18 @@ export function mount(container, ...children) {
   window.scrollTo({ top: 0 });
 }
 
+/**
+ * 「本文へ移動」リンク。hash を変えるとハッシュルーティングが画面を切り替えてしまう
+ * （回答途中の状態が消える）ため、URL は変えずに本文へフォーカスだけ移す。
+ */
+export function installSkipLink(link, target) {
+  link.addEventListener('click', event => {
+    event.preventDefault();
+    target.focus();
+    target.scrollIntoView();
+  });
+}
+
 /** 画面下部に短い通知を出す。連続で呼ばれた場合は後の通知が前の通知を置き換える。 */
 export function createToast(element) {
   let timer = 0;
