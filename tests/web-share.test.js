@@ -20,7 +20,9 @@ function env({ apiResponse = Response.json(quiz), onApi } = {}) {
     }
   };
 }
-const call = (slug, options) => onRequestGet({ request: new Request(`https://quiz.test/q/${encodeURIComponent(slug)}`), env: env(options), params: { slug } });
+// 本番の Pages と同じく、パスパラメータは URL エンコードされたまま渡す。
+const call = (slug, options) =>
+  onRequestGet({ request: new Request(`https://quiz.test/q/${encodeURIComponent(slug)}`), env: env(options), params: { slug: encodeURIComponent(slug) } });
 
 test('renderSharePage: タイトル・説明・OGP をクイズの内容にし、値は HTML エスケープする', () => {
   const html = renderSharePage(indexHtml, { title: '"><script>alert(1)</script>', description: '', questionCount: 3, url: 'https://quiz.test/q/x' });
@@ -66,4 +68,7 @@ test('/q/<slug>: 見つからない・API 障害・不正な slug は既定の�
   const invalid = await call('has space', { onApi: () => (called = true) });
   assert.equal(invalid.status, 404);
   assert.equal(called, false, '不正な slug では API を呼ばない');
+  const malformed = await onRequestGet({ request: new Request('https://quiz.test/q/%E3'), env: env({ onApi: () => (called = true) }), params: { slug: '%E3' } });
+  assert.equal(malformed.status, 404);
+  assert.equal(called, false, '壊れたエンコードでも例外にせず 404');
 });

@@ -144,7 +144,8 @@ async function serveSharePage(request, response, url) {
     ASSETS: { fetch: async () => new Response(readFileSync(resolve(webRoot, 'index.html'))) },
     API: { fetch: path => fetch(new URL(new URL(path).pathname, `http://127.0.0.1:${ports.api}`)) }
   };
-  const slug = decodeURIComponent(url.pathname.split('/')[2]);
+  // 本番の Pages と同じく、パスパラメータは URL エンコードされたまま渡す。
+  const slug = url.pathname.split('/')[2];
   const result = await onRequestGet({ request: new Request(`http://localhost:${ports.web}${url.pathname}`), env, params: { slug } });
   const { 'Strict-Transport-Security': _, ...headers } = Object.fromEntries(result.headers);
   response.writeHead(result.status, { ...headers, 'Content-Security-Policy': webHeaders['Content-Security-Policy'] });

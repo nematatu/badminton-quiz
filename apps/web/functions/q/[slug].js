@@ -12,7 +12,7 @@ import { renderSharePage } from '../_lib/share-page.js';
  */
 export async function onRequestGet({ request, env, params }) {
   const url = new URL(request.url);
-  const slug = String(params.slug ?? '');
+  const slug = decodeSlug(params.slug);
   const [page, quiz] = await Promise.all([env.ASSETS.fetch(new URL('/', url)).then(response => response.text()), loadQuiz(env, slug)]);
 
   const html = quiz
@@ -22,6 +22,18 @@ export async function onRequestGet({ request, env, params }) {
     status: quiz ? 200 : 404,
     headers: { ...SECURITY_HEADERS, 'Content-Type': 'text/html; charset=utf-8' }
   });
+}
+
+/**
+ * Pages のルーティングはパスパラメータを URL デコードしない（`%E6%97%A5…` のまま渡る）。
+ * slug は `%` を含まない形式なので、デコード済みの値が来ても二重デコードの問題はない。
+ */
+function decodeSlug(value) {
+  try {
+    return decodeURIComponent(String(value ?? ''));
+  } catch {
+    return '';
+  }
 }
 
 async function loadQuiz(env, slug) {
