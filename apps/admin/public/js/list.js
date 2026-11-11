@@ -7,7 +7,7 @@ import { h } from '../shared/dom.js';
 
 const dateFormat = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium', timeStyle: 'short' });
 
-export function listView(quizzes, { onToggleStatus }) {
+export function listView(quizzes, { onToggleStatus, onDuplicate }) {
   const counts = Object.fromEntries(Object.values(QUIZ_STATUS).map(status => [status, quizzes.filter(quiz => quiz.status === status).length]));
   const tbody = h('tbody');
   const summary = h('p', { class: 'list-summary', role: 'status' });
@@ -24,7 +24,7 @@ export function listView(quizzes, { onToggleStatus }) {
     const visible = quizzes.filter(
       quiz => (!filter.value || quiz.status === filter.value) && (!keyword || `${quiz.title} ${quiz.slug}`.toLocaleLowerCase('ja').includes(keyword))
     );
-    tbody.replaceChildren(...visible.map(quiz => row(quiz, onToggleStatus)));
+    tbody.replaceChildren(...visible.map(quiz => row(quiz, { onToggleStatus, onDuplicate })));
     summary.textContent = visible.length === quizzes.length ? `${quizzes.length}件` : `${quizzes.length}件中 ${visible.length}件を表示`;
   };
   search.addEventListener('input', render);
@@ -76,7 +76,7 @@ function stat(label, value) {
   return h('div', { class: 'stat' }, h('strong', null, value), h('span', null, label));
 }
 
-function row(quiz, onToggleStatus) {
+function row(quiz, { onToggleStatus, onDuplicate }) {
   const published = quiz.status === QUIZ_STATUS.PUBLISHED;
   return h(
     'tr',
@@ -87,12 +87,18 @@ function row(quiz, onToggleStatus) {
     h('td', null, h('time', { datetime: quiz.updatedAt }, dateFormat.format(new Date(quiz.updatedAt)))),
     h(
       'td',
-      { class: 'row-actions' },
-      h('a', { class: 'button small', href: `#/edit/${encodeURIComponent(quiz.id)}` }, '編集'),
+      { class: 'actions-cell' },
       h(
-        'button',
-        { type: 'button', class: `button small ${published ? '' : 'primary'}`, onclick: event => onToggleStatus(quiz, event.currentTarget) },
-        published ? '非公開にする' : '公開する'
+        'div',
+        { class: 'row-actions' },
+        h('a', { class: 'button small', href: `#/edit/${encodeURIComponent(quiz.id)}` }, '編集'),
+        h('a', { class: 'button small', href: `#/insights/${encodeURIComponent(quiz.id)}` }, '分析'),
+        h('button', { type: 'button', class: 'button small', onclick: event => onDuplicate(quiz, event.currentTarget) }, '複製'),
+        h(
+          'button',
+          { type: 'button', class: `button small ${published ? '' : 'primary'}`, onclick: event => onToggleStatus(quiz, event.currentTarget) },
+          published ? '非公開にする' : '公開する'
+        )
       )
     )
   );

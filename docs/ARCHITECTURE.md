@@ -4,8 +4,9 @@
 
 ```text
 Internet
-  ├─ quiz.example.com        Cloudflare Pages: apps/web（静的配信）
-  │    └─ HTTPS ───────────► qraft-api Worker  default export（公開API /v1/*）
+  ├─ quiz.example.com        Cloudflare Pages: apps/web（静的配信 + 共有URL /q/<slug> の Function）
+  │    ├─ HTTPS ───────────► qraft-api Worker  default export（公開API /v1/*）
+  │    └─ /q/<slug> Function ─ Service Binding ─► 同上（OGP 用にクイズ名を取得）
   │
   └─ admin.quiz.example.com  Cloudflare Access ─► Pages: apps/admin
        └─ Pages Function /api/*
@@ -49,6 +50,11 @@ Internet
 | GET | `/v1/quizzes/:slug` | 問題（正解・解説なし） | 30 秒 + ETag |
 | POST | `/v1/quizzes/:slug/attempts` | 全問一括の回答を採点 | no-store |
 
+公開画面の共有URL `https://quiz…/q/<slug>` は Pages Function が返す。中身は通常の画面と同じで、
+`<title>` と OGP タグだけをクイズの内容に差し替える（X などのクローラーは JavaScript を実行しないため）。
+Pages の `_headers` は Function のレスポンスに適用されないので、同じセキュリティヘッダーを
+`apps/web/functions/_lib/security-headers.js` で付け、テストで `_headers` との一致を確認している。
+
 管理（Service Binding 経由のみ）:
 
 | Method | Path | 内容 |
@@ -59,6 +65,18 @@ Internet
 | PUT | `/admin/quizzes/:id` | 更新（`version` 必須） |
 | DELETE | `/admin/quizzes/:id` | 削除（公開中は 409 `quiz_published`） |
 | POST | `/admin/quizzes/:id/status` | `{ status: published \| archived, version }` |
+| POST | `/admin/quizzes/:id/duplicate` | 下書きとして複製（タイトルに「（コピー）」） |
+| GET | `/admin/quizzes/:id/stats` | 回答統計（挑戦回数・平均正答率・得点分布・設問別の正答率と選択肢分布） |
+| GET | `/admin/quizzes/:id/history` | 変更履歴（監査ログ、新しい順に最大 50 件） |
+
+設問別の統計は、回答時の **問題内容の版（`content_version`）** が現在と同じ回答だけで出す。
+`content_version` は問題の編集（PUT）でだけ増える（公開・非公開では増えない）。
+編集前の回答は合計件数にだけ含める。
+
+## 定期実行
+
+Cron Trigger（毎日 03:17 UTC）で、`ATTEMPT_RETENTION_DAYS`（既定 365 日）を過ぎた回答記録を削除する。
+設定値が不正な場合は、誤って全件を消さないよう既定値で動く。
 
 エラーは `{ "error": "<code>", "detail"?: {...} }`。コードと日本語メッセージの対応は
 `packages/shared/src/contracts.js` の `ERROR_MESSAGES`。
@@ -78,4 +96,4 @@ Internet
 - Access policy で許可するメール / IdP グループを明示し、MFA を要求する。
 - WAF managed rules・Bot 対策（回答 API の総当たり対策）、Worker のエラー・CPU アラート、D1 のバックアップ。
 - staging / production で D1・Access Application・Pages project を分離する。
-- attempts の保持期間を決め、Cron Trigger で削除する。
+- attempts の保持期間（`ATTEMPT_RETENTION_DAYS`、既定 365 日）を運用ルールに合わせて決める。

@@ -54,7 +54,7 @@ async function submitAttempt(request, { env, ctx, cors, params }) {
 
   // 集計用の記録は応答を待たせずに行う。失敗しても採点結果は返す。
   ctx.waitUntil(
-    recordAttempt(env.DB, { quizId: quiz.id, score, total: details.length, answers }).catch(error =>
+    recordAttempt(env.DB, { quizId: quiz.id, contentVersion: quiz.contentVersion, score, total: details.length, answers }).catch(error =>
       console.error(JSON.stringify({ event: 'attempt_record_failed', message: String(error?.message ?? error) }))
     )
   );

@@ -23,7 +23,7 @@ jobs:
         run: npm run check
       - name: 単体テスト・結合テスト（Miniflare + D1）
         run: npm test
-      - name: API Worker と Admin Pages Function のビルド確認
-        run: npm run build:api && npm run build:admin
+      - name: API Worker と Pages Functions のビルド確認
+        run: npm run build:api && npm run build:admin && npm run build:web
         env:
           WRANGLER_SEND_METRICS: 'false'

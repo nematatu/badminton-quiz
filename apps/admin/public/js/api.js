@@ -43,3 +43,6 @@ export const createQuiz = quiz => request('quizzes', { method: 'POST', body: qui
 export const updateQuiz = (id, quiz) => request(`quizzes/${encodeURIComponent(id)}`, { method: 'PUT', body: quiz });
 export const deleteQuiz = id => request(`quizzes/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const changeStatus = (id, status, version) => request(`quizzes/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status, version } });
+export const duplicateQuiz = id => request(`quizzes/${encodeURIComponent(id)}/duplicate`, { method: 'POST' });
+export const getStats = id => request(`quizzes/${encodeURIComponent(id)}/stats`);
+export const getHistory = id => request(`quizzes/${encodeURIComponent(id)}/history`).then(data => data.events);

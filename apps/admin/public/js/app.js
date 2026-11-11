@@ -2,6 +2,7 @@ import { QUIZ_STATUS, errorMessage } from '../shared/contracts.js';
 import { createToast, h, installSkipLink, mount } from '../shared/dom.js';
 import * as api from './api.js';
 import { createEditor } from './editor.js';
+import { insightsView } from './insights.js';
 import { listView } from './list.js';
 
 /**
@@ -10,6 +11,7 @@ import { listView } from './list.js';
  *   #/           クイズ一覧
  *   #/new        新規作成
  *   #/edit/<id>  編集
+ *   #/insights/<id>  回答の分析と変更履歴
  *
  * hash で画面を表すので、再読み込みやブラウザの戻る操作でも同じ画面に戻れる。
  */
@@ -63,7 +65,7 @@ async function showList() {
   loading();
   try {
     const quizzes = await api.listQuizzes();
-    mount(root, listView(quizzes, { onToggleStatus: toggleStatus }));
+    mount(root, listView(quizzes, { onToggleStatus: toggleStatus, onDuplicate: duplicate }));
   } catch (error) {
     failure(error, showList);
   }
@@ -85,6 +87,32 @@ async function toggleStatus(quiz, button) {
     notify(errorMessage(error.code));
     if (error.code === 'edit_conflict') await showList();
     else button.disabled = false;
+  }
+}
+
+async function duplicate(quiz, button) {
+  button.disabled = true;
+  try {
+    const copy = await api.duplicateQuiz(quiz.id);
+    notify('複製しました（下書き）');
+    navigate(`#/edit/${encodeURIComponent(copy.id)}`);
+  } catch (error) {
+    notify(errorMessage(error.code));
+    button.disabled = false;
+  }
+}
+
+/* ───────────── 分析 ───────────── */
+
+async function showInsights(id) {
+  setPage('クイズの分析');
+  loading();
+  try {
+    const [quiz, stats, history] = await Promise.all([api.getQuiz(id), api.getStats(id), api.getHistory(id)]);
+    document.title = `${quiz.title} の分析 | Qraft Studio`;
+    mount(root, insightsView(quiz, stats, history));
+  } catch (error) {
+    failure(error, () => showInsights(id));
   }
 }
 
@@ -169,9 +197,10 @@ function route() {
   editor = null;
 
   const path = location.hash.replace(/^#/, '') || '/';
-  const edit = /^\/edit\/(.+)$/.exec(path);
+  const [, page, id] = /^\/(edit|insights)\/(.+)$/.exec(path) ?? [];
   if (path === '/new') showEditor(null);
-  else if (edit) showEditor(decodeURIComponent(edit[1]));
+  else if (page === 'edit') showEditor(decodeURIComponent(id));
+  else if (page === 'insights') showInsights(decodeURIComponent(id));
   else showList();
 }
 

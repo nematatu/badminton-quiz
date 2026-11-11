@@ -48,3 +48,19 @@ test('slugFor: 日本語を含むタイトルから公開URL用の slug を作�
     assert.doesNotThrow(() => encodeURIComponent(slug));
   }
 });
+
+test('copyTitle: 「（コピー）」を付けてもタイトル上限（コードポイント）を超えない', async () => {
+  const { copyTitle } = await import('../workers/api/src/admin-api.js');
+  const { LIMITS, charLength } = await import('../packages/shared/src/contracts.js');
+  assert.equal(copyTitle('クイズ'), 'クイズ（コピー）');
+  const long = copyTitle('𠮷'.repeat(LIMITS.title));
+  assert.equal(charLength(long), LIMITS.title);
+  assert.ok(long.endsWith('（コピー）'));
+});
+
+test('retentionDays: 不正な設定は既定値に倒す', async () => {
+  const { DEFAULT_RETENTION_DAYS, retentionDays } = await import('../workers/api/src/maintenance.js');
+  assert.equal(retentionDays({}), DEFAULT_RETENTION_DAYS);
+  assert.equal(retentionDays({ ATTEMPT_RETENTION_DAYS: '30' }), 30);
+  for (const value of ['0', '-1', 'abc', '1.5', '99999']) assert.equal(retentionDays({ ATTEMPT_RETENTION_DAYS: value }), DEFAULT_RETENTION_DAYS, value);
+});

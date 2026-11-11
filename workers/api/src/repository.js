@@ -94,6 +94,7 @@ function assemble(row, questionRows) {
     timeLimitSeconds: row.time_limit_seconds,
     status: row.status,
     version: row.version,
+    contentVersion: row.content_version,
     updatedAt: row.updated_at,
     publishedAt: row.published_at,
     questions: questionRows.map(question => ({
@@ -149,7 +150,7 @@ function insertAudit(db, { actor, action, quizId, metadata = {}, guard }) {
     .bind(...values, guard);
 }
 
-export async function createQuiz(db, { input, slug, actor }) {
+export async function createQuiz(db, { input, slug, actor, duplicatedFrom }) {
   const id = crypto.randomUUID();
   const timestamp = now();
   await db.batch([
@@ -160,7 +161,7 @@ export async function createQuiz(db, { input, slug, actor }) {
       )
       .bind(id, slug(id), input.title, input.description, input.timeLimitSeconds, QUIZ_STATUS.DRAFT, actor, timestamp, crypto.randomUUID()),
     ...input.questions.map(question => insertQuestion(db, id, question)),
-    insertAudit(db, { actor, action: 'quiz.create', quizId: id, metadata: { title: input.title } })
+    insertAudit(db, { actor, action: 'quiz.create', quizId: id, metadata: { title: input.title, ...(duplicatedFrom ? { duplicatedFrom } : {}) } })
   ]);
   return id;
 }
@@ -181,7 +182,7 @@ export async function updateQuiz(db, { id, version, input, actor }) {
       .prepare(
         `UPDATE quizzes
             SET title = ?1, description = ?2, time_limit_seconds = ?3, updated_at = ?4,
-                version = version + 1, revision_id = ?5
+                version = version + 1, content_version = content_version + 1, revision_id = ?5
           WHERE id = ?6 AND version = ?7`
       )
       .bind(input.title, input.description, input.timeLimitSeconds, now(), guard, id, version),
@@ -239,11 +240,88 @@ export async function deleteQuiz(db, { id, actor }) {
   return exists ? 'published' : 'not_found';
 }
 
-export function recordAttempt(db, { quizId, score, total, answers }) {
+export function recordAttempt(db, { quizId, contentVersion, score, total, answers }) {
   return db
-    .prepare('INSERT INTO attempts (id, quiz_id, score, total, answers_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
-    .bind(crypto.randomUUID(), quizId, score, total, JSON.stringify(answers), now())
+    .prepare('INSERT INTO attempts (id, quiz_id, content_version, score, total, answers_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
+    .bind(crypto.randomUUID(), quizId, contentVersion, score, total, JSON.stringify(answers), now())
     .run();
+}
+
+/* ───────────── 統計・履歴・保守 ───────────── */
+
+/**
+ * 回答の集計。設問別の数値は「現在の問題内容（content_version）」への回答だけで出す。
+ * 問題を編集すると設問の並びや選択肢が変わり、古い回答と混ぜると意味を失うため。
+ * 集計は 1 回の batch（D1 への往復 1 回）で行い、answers_json は json_each で展開する。
+ */
+export async function getQuizStats(db, quiz) {
+  const version = quiz.contentVersion;
+  const [all, current, distribution, answers] = await db.batch([
+    db.prepare('SELECT COUNT(*) AS n FROM attempts WHERE quiz_id = ?1').bind(quiz.id),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n,
+                AVG(CAST(score AS REAL) / total) AS average_rate,
+                SUM(score = total) AS perfect,
+                MAX(created_at) AS last_attempt_at
+           FROM attempts WHERE quiz_id = ?1 AND content_version = ?2`
+      )
+      .bind(quiz.id, version),
+    db.prepare('SELECT score, COUNT(*) AS n FROM attempts WHERE quiz_id = ?1 AND content_version = ?2 GROUP BY score').bind(quiz.id, version),
+    db
+      .prepare(
+        `SELECT CAST(answer.key AS INTEGER) AS position, answer.value AS selected, COUNT(*) AS n
+           FROM attempts, json_each(attempts.answers_json) AS answer
+          WHERE attempts.quiz_id = ?1 AND attempts.content_version = ?2
+          GROUP BY answer.key, answer.value`
+      )
+      .bind(quiz.id, version)
+  ]);
+
+  const total = quiz.questions.length;
+  const summary = current.results[0];
+  const scoreDistribution = Array(total + 1).fill(0);
+  for (const row of distribution.results) if (row.score >= 0 && row.score <= total) scoreDistribution[row.score] = row.n;
+
+  const questions = quiz.questions.map(question => ({ prompt: question.prompt, options: question.options, correctIndex: question.correctIndex, optionCounts: [0, 0, 0, 0], unanswered: 0 }));
+  for (const row of answers.results) {
+    const question = questions[row.position];
+    if (!question) continue;
+    if (row.selected >= 0 && row.selected < question.optionCounts.length) question.optionCounts[row.selected] = row.n;
+    else question.unanswered += row.n;
+  }
+  for (const question of questions) {
+    const responses = question.optionCounts.reduce((sum, count) => sum + count, 0) + question.unanswered;
+    question.correctRate = responses ? question.optionCounts[question.correctIndex] / responses : null;
+  }
+
+  return {
+    contentVersion: version,
+    totalAttempts: all.results[0].n,
+    attempts: summary.n,
+    averageRate: summary.n ? summary.average_rate : null,
+    perfectCount: summary.perfect ?? 0,
+    lastAttemptAt: summary.last_attempt_at,
+    scoreDistribution,
+    questions
+  };
+}
+
+const HISTORY_LIMIT = 50;
+
+/** クイズの変更履歴（監査ログ）。新しい順。 */
+export async function listQuizHistory(db, quizId) {
+  const { results } = await db
+    .prepare('SELECT action, actor, metadata_json, created_at FROM audit_events WHERE quiz_id = ?1 ORDER BY created_at DESC LIMIT ?2')
+    .bind(quizId, HISTORY_LIMIT)
+    .all();
+  return results.map(row => ({ action: row.action, actor: row.actor, metadata: JSON.parse(row.metadata_json), createdAt: row.created_at }));
+}
+
+/** 保持期間を過ぎた回答記録を削除し、削除件数を返す。 */
+export async function deleteAttemptsBefore(db, cutoff) {
+  const result = await db.prepare('DELETE FROM attempts WHERE created_at < ?1').bind(cutoff.toISOString()).run();
+  return result.meta.changes;
 }
 
 async function explainMiss(db, id) {

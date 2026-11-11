@@ -10,7 +10,7 @@ const read = path => readFileSync(new URL(path, root), 'utf8');
 const problems = [];
 
 const PLACEHOLDER = /example\.com|REPLACE/;
-for (const path of ['workers/api/wrangler.toml', 'apps/admin/wrangler.toml', 'apps/web/wrangler.toml', 'apps/web/public/config.js', 'apps/web/public/_headers']) {
+for (const path of ['workers/api/wrangler.toml', 'apps/admin/wrangler.toml', 'apps/web/wrangler.toml', 'apps/web/public/config.js', 'apps/web/public/_headers', 'apps/web/functions/_lib/security-headers.js']) {
   read(path)
     .split('\n')
     .forEach((line, index) => {

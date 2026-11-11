@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+import { purgeExpiredAttempts } from '../workers/api/src/maintenance.js';
 import { updateQuiz } from '../workers/api/src/repository.js';
 import { AUDIENCE, ISSUER, createSigner } from './helpers/access.js';
 
@@ -286,6 +287,67 @@ describe('管理API（AdminApi エントリポイント）', () => {
     const sample = body.quizzes.find(quiz => quiz.slug === SEED_SLUG);
     assert.equal(sample.questionCount, 6);
     assert.equal(sample.version, 1);
+  });
+
+  test('回答統計: 現在の問題内容への回答だけで設問別の正答率と選択肢分布を出す', async () => {
+    const { body: quiz } = await admin('quizzes', { method: 'POST', body: sampleQuiz('統計テスト') });
+    await admin(`quizzes/${quiz.id}/status`, { method: 'POST', body: { status: 'published', version: quiz.version } });
+    const slug = encodeURIComponent(quiz.slug);
+    // 正解は [1, 0]
+    for (const body of [{ answers: [1, 0] }, { answers: [1, 2] }, { answers: [3, 0] }, { answers: [1, -1], timedOut: true }]) {
+      const response = await postJson(`/v1/quizzes/${slug}/attempts`, body);
+      assert.equal(response.status, 201);
+      await response.arrayBuffer();
+    }
+
+    const { status, body: stats } = await admin(`quizzes/${quiz.id}/stats`);
+    assert.equal(status, 200);
+    assert.equal(stats.attempts, 4);
+    assert.equal(stats.totalAttempts, 4);
+    assert.equal(stats.perfectCount, 1);
+    assert.equal(stats.averageRate, (2 + 1 + 1 + 1) / 8);
+    assert.deepEqual(stats.scoreDistribution, [0, 3, 1]);
+    assert.deepEqual(stats.questions[0].optionCounts, [0, 3, 0, 1]);
+    assert.equal(stats.questions[0].correctRate, 0.75);
+    assert.deepEqual(stats.questions[1].optionCounts, [2, 0, 1, 0]);
+    assert.equal(stats.questions[1].unanswered, 1);
+    assert.equal(stats.questions[1].correctRate, 0.5);
+
+    // 問題を編集すると設問別の集計は新しい内容でやり直し（合計件数には残る）
+    const current = await admin(`quizzes/${quiz.id}`);
+    await admin(`quizzes/${quiz.id}`, { method: 'PUT', body: { ...sampleQuiz('統計テスト'), version: current.body.version } });
+    const { body: afterEdit } = await admin(`quizzes/${quiz.id}/stats`);
+    assert.equal(afterEdit.attempts, 0);
+    assert.equal(afterEdit.totalAttempts, 4);
+    assert.equal(afterEdit.averageRate, null);
+    assert.equal(afterEdit.questions[0].correctRate, null);
+  });
+
+  test('複製すると下書きのコピーができ、変更履歴に残る', async () => {
+    const { body: source } = await admin('quizzes', { method: 'POST', body: sampleQuiz('複製元') });
+    const copied = await admin(`quizzes/${source.id}/duplicate`, { method: 'POST' });
+    assert.equal(copied.status, 201);
+    assert.equal(copied.body.title, '複製元（コピー）');
+    assert.equal(copied.body.status, 'draft');
+    assert.notEqual(copied.body.id, source.id);
+    assert.deepEqual(copied.body.questions.map(q => q.prompt), source.questions.map(q => q.prompt));
+
+    const { body: history } = await admin(`quizzes/${copied.body.id}/history`);
+    assert.equal(history.events.length, 1);
+    assert.equal(history.events[0].action, 'quiz.create');
+    assert.equal(history.events[0].actor, 'admin@example.test');
+    assert.equal(history.events[0].metadata.duplicatedFrom, source.id);
+
+    assert.equal((await admin('quizzes/no-such-id/duplicate', { method: 'POST' })).status, 404);
+  });
+
+  test('保持期間を過ぎた回答記録だけを削除する', async () => {
+    await db.prepare("INSERT INTO attempts (id, quiz_id, score, total, answers_json, created_at) VALUES ('old-attempt', ?1, 0, 6, '[]', '2020-01-01T00:00:00.000Z')").bind('00000000-0000-4000-8000-000000000001').run();
+    const before = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
+    const deleted = await purgeExpiredAttempts({ DB: db, ATTEMPT_RETENTION_DAYS: '30' });
+    assert.equal(deleted, 1);
+    const after = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
+    assert.equal(after.n, before.n - 1);
   });
 
   test('Access の鍵がローテーションされても、JWKS を取り直して受け付ける', async () => {
