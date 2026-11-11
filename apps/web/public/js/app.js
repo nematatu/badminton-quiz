@@ -2,13 +2,14 @@ import { errorMessage } from '../shared/contracts.js';
 import { copyText, createToast, installSkipLink, mount } from '../shared/dom.js';
 import { fetchQuiz, fetchQuizzes, submitAttempt } from './api.js';
 import { QuizSession, formatDuration } from './session.js';
-import { errorView, homeView, introView, loadingView, questionView, quizHref, resultView } from './views.js';
+import { errorView, homeView, introView, loadingView, questionView, resultView } from './views.js';
 
 /**
  * 公開画面のコントローラー。URL の hash で画面を決め、状態遷移とタイマーを管理する。
  *
  *   #/            クイズ一覧（旧URL #quizzes も同じ）
- *   #quiz/<slug>  クイズ（共有URLの形式。導入 → 設問 → 結果）
+ *   #quiz/<slug>  クイズ（導入 → 設問 → 結果）。アプリ内のリンクはこの形式
+ *   /q/<slug>     共有URL。サーバーが OGP タグを埋め込んだ同じ画面を返す（hash が無い時だけ使う）
  */
 
 const BRAND = 'Qraft';
@@ -117,8 +118,9 @@ async function finish(timedOut) {
   }
 }
 
+/** 共有URL。/q/<slug> はサーバー側で OGP タグが入るので、X 等でクイズ名がプレビューされる。 */
 function shareUrl(slug) {
-  return new URL(quizHref(slug), `${location.origin}${location.pathname}`).href;
+  return `${location.origin}/q/${encodeURIComponent(slug)}`;
 }
 
 /* ───────────── タイマー ───────────── */
@@ -174,13 +176,24 @@ window.addEventListener('beforeunload', event => {
   if (session?.hasProgress) event.preventDefault();
 });
 
+/** URL から表示するクイズの slug（エンコードされたまま）を取り出す。一覧なら null。 */
+function slugFromUrl() {
+  if (location.hash) {
+    // 共有URL（/q/<slug>）から #/ などへ移動したら、パスを / に戻して URL を整える。
+    if (location.pathname !== '/') history.replaceState(null, '', `/${location.hash}`);
+    const hash = location.hash.replace(/^#\/?/, '');
+    return hash.startsWith('quiz/') ? hash.slice('quiz/'.length) : null;
+  }
+  return /^\/q\/([^/]+)\/?$/.exec(location.pathname)?.[1] ?? null;
+}
+
 function route() {
   stopTimer();
   session = null;
-  const hash = location.hash.replace(/^#\/?/, '');
-  if (!hash.startsWith('quiz/')) return showHome();
+  const slug = slugFromUrl();
+  if (slug === null) return showHome();
   try {
-    showQuiz(decodeURIComponent(hash.slice('quiz/'.length)));
+    showQuiz(decodeURIComponent(slug));
   } catch {
     showError({ code: 'not_found' });
   }

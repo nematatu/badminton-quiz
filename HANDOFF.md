@@ -33,7 +33,7 @@
    - `workers/api/wrangler.toml`: `routes`、`ALLOWED_ORIGINS`、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、`database_id`、Rate Limiting の `namespace_id`（アカウント内で一意な正整数）
    - `apps/web/public/config.js` の `PRODUCTION_API_ORIGIN` と `apps/web/public/_headers` の `connect-src`
 5. `npm run db:migrate:remote`
-6. `npm run deploy:api` → `npm run deploy:admin` → `npm run deploy:web`（この順。Admin の Service Binding 先が先に必要）
+6. `npm run deploy:api` → `npm run deploy:admin` → `npm run deploy:web`（この順。Admin と Web の Service Binding 先の API が先に必要）
 7. Admin Pages の custom domain を Access Application で保護し、その AUD が `ACCESS_AUD` と一致していることを確認する。
 8. 本番 E2E（下記チェックリスト）。
 
@@ -49,7 +49,10 @@
 - [ ] 公開中の削除は 409、非公開後の削除は 204
 - [ ] 連続した回答送信で 429（Rate Limiting は拠点単位・結果整合なので、回数の幅を記録する）
 - [ ] 公開画面・管理画面でブラウザの CSP 違反が出ない
-- [ ] `audit_events` に actor / action が記録される
+- [ ] `audit_events` に actor / action が記録され、管理画面の「分析」の変更履歴に出る
+- [ ] 共有URL `https://quiz…/q/<slug>` の HTML の `og:title` がクイズ名になっている（X の投稿プレビューでも確認）
+- [ ] 回答後、管理画面の「分析」に挑戦回数・設問別の正答率が反映される
+- [ ] Cron Trigger が登録され、Worker のログに `attempts_purged` が毎日出る
 - [ ] Worker のログに JWT・回答内容などを不用意に出していない
 
 ## 次の担当への注意

@@ -2,8 +2,8 @@
 
 Cloudflare 上で、管理系と公開系を分離して動かす 4 択クイズサービス。
 
-- **公開画面**（`apps/web`）: クイズ一覧 → 導入 → 回答 → サーバー採点 → 解説・X でシェア
-- **管理画面**（`apps/admin`）: クイズの作成・編集・並べ替え・公開管理。Cloudflare Access で保護
+- **公開画面**（`apps/web`）: クイズ一覧 → 導入 → 回答 → サーバー採点 → 解説・X でシェア（共有URLにはクイズ名のプレビュー付き）
+- **管理画面**（`apps/admin`）: クイズの作成・編集・複製・並べ替え・公開管理、回答の分析と変更履歴。Cloudflare Access で保護
 - **API**（`workers/api`）: 公開API（インターネット向け）と管理API（Service Binding 専用）、D1
 
 設計の詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、今回の見直し内容は [docs/REFACTORING.md](docs/REFACTORING.md)、
@@ -13,13 +13,14 @@ Cloudflare 上で、管理系と公開系を分離して動かす 4 択クイズ
 
 ```text
 apps/
-  web/     公開画面（Cloudflare Pages、静的配信のみ）
+  web/     公開画面（Cloudflare Pages。共有URL /q/<slug> だけ Pages Function）
   admin/   管理画面（Cloudflare Pages + Pages Function で API へ中継）
 workers/api/src/
-  index.js        エントリポイント（default = 公開API / AdminApi = 管理API）
+  index.js        エントリポイント（default = 公開API / AdminApi = 管理API / scheduled = 保守）
   public-api.js   公開ルート      admin-api.js  管理ルート
   repository.js   D1 の SQL       validation.js 入力検証
   auth.js         Access JWT 検証 http.js / router.js / rate-limit.js
+  maintenance.js  定期実行（古い回答記録の削除）
 packages/shared/src/  Worker と画面で共有する契約（上限値・エラーメッセージ）と DOM ヘルパー
 migrations/           D1 スキーマ
 scripts/              開発・検証・デプロイ前チェック

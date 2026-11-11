@@ -118,6 +118,9 @@ createServer((request, response) => {
   const url = new URL(request.url, 'http://localhost');
   if (url.pathname.startsWith('/api/')) return proxy(request, response, { port: ports.api, path: `${url.pathname.slice(4)}${url.search}` });
 
+  // 共有URL: 本番と同じ Pages Function を、ASSETS と API を手元の実体に差し替えて実行する。
+  if (/^\/q\/[^/]+\/?$/.test(url.pathname)) return serveSharePage(request, response, url);
+
   if (url.pathname === '/config.js') {
     response.writeHead(200, { ...webHeaders, 'Content-Type': types['.js'] });
     return response.end("export const API_ORIGIN = '/api';\n");
@@ -134,6 +137,20 @@ createServer((request, response) => {
   response.writeHead(200, { ...webHeaders, 'Content-Type': types[extname(file)] ?? 'application/octet-stream' });
   createReadStream(file).pipe(response);
 }).listen(ports.web, '127.0.0.1');
+
+async function serveSharePage(request, response, url) {
+  const { onRequestGet } = await import('../apps/web/functions/q/[slug].js');
+  const env = {
+    ASSETS: { fetch: async () => new Response(readFileSync(resolve(webRoot, 'index.html'))) },
+    API: { fetch: path => fetch(new URL(new URL(path).pathname, `http://127.0.0.1:${ports.api}`)) }
+  };
+  // 本番の Pages と同じく、パスパラメータは URL エンコードされたまま渡す。
+  const slug = url.pathname.split('/')[2];
+  const result = await onRequestGet({ request: new Request(`http://localhost:${ports.web}${url.pathname}`), env, params: { slug } });
+  const { 'Strict-Transport-Security': _, ...headers } = Object.fromEntries(result.headers);
+  response.writeHead(result.status, { ...headers, 'Content-Security-Policy': webHeaders['Content-Security-Policy'] });
+  response.end(await result.text());
+}
 
 /* ── 5. 管理画面: Cloudflare Access の代わりに JWT を付けて Pages へ中継 ── */
 

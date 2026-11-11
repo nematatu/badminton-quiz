@@ -1,6 +1,7 @@
 import { authenticateAdmin } from './auth.js';
 import { HttpError, json, noContent, readJson } from './http.js';
-import { changeQuizStatus, createQuiz, deleteQuiz, findQuizById, listAllQuizzes, updateQuiz } from './repository.js';
+import { LIMITS } from '../../../packages/shared/src/contracts.js';
+import { changeQuizStatus, createQuiz, deleteQuiz, findQuizById, getQuizStats, listAllQuizzes, listQuizHistory, updateQuiz } from './repository.js';
 import { createRouter } from './router.js';
 import { validateQuizInput, validateStatusChange, validateVersion } from './validation.js';
 
@@ -62,6 +63,36 @@ async function changeStatus(request, { env, identity, params }) {
   return json({ id: quiz.id, status: quiz.status, version: quiz.version });
 }
 
+/** 既存のクイズを下書きとして複製する。タイトルには「（コピー）」を付ける。 */
+export function copyTitle(title) {
+  const suffix = '（コピー）';
+  const room = LIMITS.title - Array.from(suffix).length;
+  return `${Array.from(title).slice(0, room).join('')}${suffix}`;
+}
+
+async function duplicate(_request, { env, identity, params }) {
+  const source = await findQuizById(env.DB, params.id);
+  if (!source) throw new HttpError(404, 'not_found');
+  const input = {
+    title: copyTitle(source.title),
+    description: source.description,
+    timeLimitSeconds: source.timeLimitSeconds,
+    questions: source.questions.map(({ prompt, options, correctIndex, explanation }, position) => ({ position, prompt, options, correctIndex, explanation }))
+  };
+  const id = await createQuiz(env.DB, { input, actor: identity.actor, slug: quizId => slugFor(input.title, quizId), duplicatedFrom: source.id });
+  return json(await findQuizById(env.DB, id), { status: 201 });
+}
+
+async function stats(_request, { env, params }) {
+  const quiz = await findQuizById(env.DB, params.id);
+  if (!quiz) throw new HttpError(404, 'not_found');
+  return json(await getQuizStats(env.DB, quiz));
+}
+
+async function history(_request, { env, params }) {
+  return json({ events: await listQuizHistory(env.DB, params.id) });
+}
+
 async function remove(_request, { env, identity, params }) {
   const result = await deleteQuiz(env.DB, { id: params.id, actor: identity.actor });
   if (result === 'not_found') throw new HttpError(404, 'not_found');
@@ -75,7 +106,10 @@ const router = createRouter([
   ['GET', '/admin/quizzes/:id', show],
   ['PUT', '/admin/quizzes/:id', update],
   ['DELETE', '/admin/quizzes/:id', remove],
-  ['POST', '/admin/quizzes/:id/status', changeStatus]
+  ['POST', '/admin/quizzes/:id/status', changeStatus],
+  ['POST', '/admin/quizzes/:id/duplicate', duplicate],
+  ['GET', '/admin/quizzes/:id/stats', stats],
+  ['GET', '/admin/quizzes/:id/history', history]
 ]);
 
 /** 認証してからルーティングする。未認証ではルートの有無すら分からない。 */

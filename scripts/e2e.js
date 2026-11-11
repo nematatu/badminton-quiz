@@ -131,7 +131,43 @@ for (const [name, options] of [
   assert.match(await page.locator('.review').innerText(), /正解\s*B\. 2/);
   const share = await page.getByRole('link', { name: 'Xでシェア' }).getAttribute('href');
   assert.match(decodeURIComponent(share), /#Qraft #4択クイズ/);
+  const shareUrl = new URL(share).searchParams.get('url');
+  assert.match(shareUrl, /\/q\/[^/#]+$/, '共有URLは OGP の入る /q/<slug> 形式');
   await shot(page, `web-${name}-result`);
+
+  // 共有URLを開くと同じクイズの導入画面になり、HTML にはクイズ名の OGP が入っている
+  const sharedHtml = await (await page.request.get(shareUrl)).text();
+  assert.match(sharedHtml, new RegExp(`<meta property="og:title" content="${title} \\| Qraft">`));
+  await page.goto(shareUrl);
+  await page.getByRole('button', { name: 'はじめる' }).waitFor();
+  assert.equal(await page.title(), `${title} | Qraft`);
+  // そこから一覧へ戻ると URL は / に整えられる
+  await page.getByRole('link', { name: '← クイズ一覧' }).click();
+  await page.getByRole('heading', { name: '公開中のクイズ' }).waitFor();
+  assert.equal(new URL(page.url()).pathname, '/');
+  await page.context().close();
+}
+
+/* ── 管理画面: 分析（上の 3 回の回答が集計される）→ 複製 ── */
+{
+  const page = await open(ADMIN, { viewport: { width: 1280, height: 900 } });
+  const row = page.getByRole('row', { name: new RegExp(title) });
+  await row.getByRole('link', { name: '分析' }).click();
+  await page.getByRole('heading', { name: '得点の分布' }).waitFor();
+  const kpis = await page.locator('.stats').innerText();
+  assert.match(kpis, /3\s*挑戦回数/);
+  assert.match(kpis, /50%\s*平均正答率/);
+  // 1問目（空の色は？）は全員正解、2問目（1 + 1 は？）は全員 C を選んで不正解
+  const rates = await page.locator('.meter-value').allInnerTexts();
+  assert.deepEqual(rates, ['100%', '0%']);
+  assert.match(await page.locator('.meter-row').nth(1).innerText(), /C\. 3: 3人/);
+  assert.match(await page.locator('.history').innerText(), /公開[\s\S]*作成/);
+  await shot(page, 'admin-insights');
+
+  await page.goto(ADMIN);
+  await page.getByRole('row', { name: new RegExp(title) }).getByRole('button', { name: '複製' }).click();
+  await page.getByRole('heading', { name: 'クイズを編集' }).waitFor();
+  assert.equal(await page.getByLabel('タイトル').inputValue(), `${title}（コピー）`);
   await page.context().close();
 }
 
