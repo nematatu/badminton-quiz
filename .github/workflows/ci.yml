@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 構文チェック・共有ファイルの同期確認
+        run: npm run check
+      - name: 単体テスト・結合テスト（Miniflare + D1）
+        run: npm test
+      - name: API Worker と Admin Pages Function のビルド確認
+        run: npm run build:api && npm run build:admin
+        env:
+          WRANGLER_SEND_METRICS: 'false'

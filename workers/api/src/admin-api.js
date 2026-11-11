@@ -1,0 +1,85 @@
+import { authenticateAdmin } from './auth.js';
+import { HttpError, json, noContent, readJson } from './http.js';
+import { changeQuizStatus, createQuiz, deleteQuiz, findQuizById, listAllQuizzes, updateQuiz } from './repository.js';
+import { createRouter } from './router.js';
+import { validateQuizInput, validateStatusChange, validateVersion } from './validation.js';
+
+/**
+ * 管理API。Worker の名前付きエントリポイント `AdminApi` からだけ呼ばれ、
+ * 公開ドメインからは到達できない（Admin Pages の Service Binding 専用）。
+ * それでも多層防御として、毎回 Cloudflare Access の JWT を検証する。
+ */
+
+const QUIZ_MAX_BYTES = 256 * 1024;
+
+const conflict = currentVersion => new HttpError(409, 'edit_conflict', { detail: { currentVersion } });
+
+/** タイトルから URL 用の slug を作る。末尾に ID の一部を付けて一意にする。 */
+export function slugFor(title, id) {
+  const words = title
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '');
+  // UTF-16 単位で切るとサロゲートペア（𠮷 など）の途中で切れるため、コードポイント単位で切る。
+  const base = Array.from(words).slice(0, 48).join('').replace(/-+$/, '');
+  const suffix = id.replace(/-/g, '').slice(0, 8);
+  return base ? `${base}-${suffix}` : `quiz-${suffix}`;
+}
+
+async function list(_request, { env }) {
+  return json({ quizzes: await listAllQuizzes(env.DB) });
+}
+
+async function create(request, { env, identity }) {
+  const input = validateQuizInput(await readJson(request, QUIZ_MAX_BYTES));
+  const id = await createQuiz(env.DB, { input, actor: identity.actor, slug: quizId => slugFor(input.title, quizId) });
+  return json(await findQuizById(env.DB, id), { status: 201 });
+}
+
+async function show(_request, { env, params }) {
+  const quiz = await findQuizById(env.DB, params.id);
+  if (!quiz) throw new HttpError(404, 'not_found');
+  return json(quiz);
+}
+
+async function update(request, { env, identity, params }) {
+  const body = await readJson(request, QUIZ_MAX_BYTES);
+  const version = validateVersion(body);
+  const input = validateQuizInput(body);
+  const result = await updateQuiz(env.DB, { id: params.id, version, input, actor: identity.actor });
+  if (result === 'not_found') throw new HttpError(404, 'not_found');
+  if (result !== 'updated') throw conflict(result.conflict);
+  return json(await findQuizById(env.DB, params.id));
+}
+
+async function changeStatus(request, { env, identity, params }) {
+  const { status, version } = validateStatusChange(await readJson(request, 1024));
+  const result = await changeQuizStatus(env.DB, { id: params.id, version, status, actor: identity.actor });
+  if (result === 'not_found') throw new HttpError(404, 'not_found');
+  if (typeof result === 'object') throw conflict(result.conflict);
+  const quiz = await findQuizById(env.DB, params.id);
+  return json({ id: quiz.id, status: quiz.status, version: quiz.version });
+}
+
+async function remove(_request, { env, identity, params }) {
+  const result = await deleteQuiz(env.DB, { id: params.id, actor: identity.actor });
+  if (result === 'not_found') throw new HttpError(404, 'not_found');
+  if (result === 'published') throw new HttpError(409, 'quiz_published');
+  return noContent();
+}
+
+const router = createRouter([
+  ['GET', '/admin/quizzes', list],
+  ['POST', '/admin/quizzes', create],
+  ['GET', '/admin/quizzes/:id', show],
+  ['PUT', '/admin/quizzes/:id', update],
+  ['DELETE', '/admin/quizzes/:id', remove],
+  ['POST', '/admin/quizzes/:id/status', changeStatus]
+]);
+
+/** 認証してからルーティングする。未認証ではルートの有無すら分からない。 */
+export async function handleAdmin(request, context) {
+  const identity = await authenticateAdmin(request, context.env);
+  return router(request, { ...context, identity });
+}

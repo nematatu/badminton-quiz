@@ -1,12 +1,13 @@
+# 公開画面のレスポンスヘッダー。connect-src の API Origin は config.js と一致させる。
 /*
-  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.quiz.example.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.quiz.example.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
   Cache-Control: no-cache
 
-/styles.css
-  Cache-Control: public, max-age=86400
-/app.js
-  Cache-Control: public, max-age=86400
+# ファイル名にハッシュを付けていないため長期キャッシュはせず、すべて ETag で再検証する
+# （上の Cache-Control: no-cache）。HTML と JS の版ずれを防ぎ、304 なので転送量もほぼ増えない。

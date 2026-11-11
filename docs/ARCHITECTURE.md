@@ -1,43 +1,81 @@
 # Qraft architecture
 
-## Deployment topology
+## デプロイ構成
 
 ```text
 Internet
-  ├─ quiz.example.com       Cloudflare Pages: apps/web/public
-  │    └─ public HTTPS ───► qraft-api Worker /v1/*
-  └─ admin.quiz.example.com Cloudflare Access + Pages: apps/admin
-       └─ Pages Function ─► Service Binding ─► qraft-api Worker /admin/*
-                                                ├─ D1 (content/attempts)
-                                                └─ Workers Rate Limiting binding
+  ├─ quiz.example.com        Cloudflare Pages: apps/web（静的配信）
+  │    └─ HTTPS ───────────► qraft-api Worker  default export（公開API /v1/*）
+  │
+  └─ admin.quiz.example.com  Cloudflare Access ─► Pages: apps/admin
+       └─ Pages Function /api/*
+            └─ Service Binding（entrypoint = AdminApi）─► qraft-api Worker  AdminApi（管理API /admin/*）
+                                                          ├─ D1（クイズ・問題・回答・監査ログ）
+                                                          └─ Workers Rate Limiting
 ```
 
-管理画面と回答画面は、プロジェクト・ドメイン・デプロイを分離する。管理画面をCloudflare Access Applicationで保護し、Pages Functionが受け取ったAccess JWTをService Binding先へ転送する。WorkerもAccess公開鍵でJWTを再検証するため、管理APIはFunctionを信頼しただけの構成にはしない。
+- 公開画面・管理画面・API は別プロジェクト・別ドメイン・別デプロイ。
+- 管理API は Worker の **名前付きエントリポイント `AdminApi`** にだけ存在する。公開ドメインの
+  default export は公開ルートしか持たないため、管理API はインターネットから到達できない。
 
-## Trust boundaries
+## 信頼境界
 
-- ブラウザ入力、URL、JSON、ヘッダーはすべて信頼しない。
-- 公開GETでは `correct_index` と解説を返さない。採点はWorker内で行う。
-- 管理APIはAccess JWTの署名、`iss`、`aud`、`exp`、`nbf`を検証する。
-- D1はbind parameterのみを使い、SQL文字列へ入力を連結しない。
-- 管理PagesからAPIへはインターネット向けURLでなくService Bindingを使う。
-- 公開POSTはquizと接続元を組み合わせたkeyでWorkers Rate Limiting bindingを適用する。KV read-modify-writeの競合を避け、同一拠点内の高速なカウンターを利用する。共有IPへの影響と拠点単位・eventual consistencyという特性があるため、Bot Management/WAF Rate Limitingも外側で併用する。
+| 境界 | 対策 |
+|---|---|
+| ブラウザ → 公開API | CORS は `ALLOWED_ORIGINS` 完全一致のみ。入力はすべて検証。正解・解説は採点結果としてのみ返す |
+| ブラウザ → 管理画面 | Cloudflare Access（IdP + MFA を推奨）。CSP + Trusted Types、`frame-ancestors 'none'` |
+| 管理画面 → Pages Function | 状態を変える要求は同一オリジン（`Sec-Fetch-Site` / `Origin`）のみ。転送ヘッダーは許可リスト |
+| Pages Function → AdminApi | Service Binding。AdminApi は Access JWT（RS256、iss/aud/exp/nbf/iat/sub）を毎回再検証 |
+| Worker → D1 | bind parameter のみ。複数文の書き込みは 1 batch = 1 トランザクション |
 
-## Data lifecycle
+## データの一貫性
 
-`draft → published → archived`。公開中の問題だけが公開APIに現れる。物理削除は公開中には許可せず、事故を防ぐ。更新時はversionを照合し、古い編集画面による上書きをHTTP 409で拒否する。作成・更新・公開・非公開・削除はactorと時刻を監査ログへ保存する。回答履歴は個人識別子を保存せず、採点・集計に必要な回答配列と時刻だけを保存する。保持期間を決め、Cron Triggerで古いattemptsを削除する運用を推奨する。
+- 状態遷移は `draft → published ⇄ archived`。公開中は物理削除不可。
+- 更新は **楽観的ロック**（`version`）。古い画面からの保存は HTTP 409 `edit_conflict`。
+- 更新・状態変更・削除は、本体・問題・監査ログを **1 つの D1 batch** で実行する。
+  version 照合に成功した UPDATE だけが `revision_id` に今回の乱数を書き、後続の文はその値を条件に
+  実行されるため、照合に失敗した場合は何も変わらない。途中の文が失敗すれば batch 全体が巻き戻る。
+- 監査ログ（`audit_events`）は物理削除後も残す（`quiz_id` に外部キーなし）。
+- 回答履歴（`attempts`）は個人識別子を持たない（回答配列・得点・時刻のみ）。
 
-## Performance
+## API
 
-- Web/Adminは静的Pagesでエッジ配信。
-- 公開一覧は `s-maxage=300`、問題は `s-maxage=600`。公開状態変更時の即時反映が必要ならCache API key purgeを追加する。
-- 管理レスポンス、採点結果は `no-store`。
-- D1には公開一覧、問題順、回答集計向けindexを作成。
-- 依存のない小さなES Modulesで初期JavaScriptを抑制。
+公開（`https://api…`）:
 
-## Remaining production decisions
+| Method | Path | 内容 | キャッシュ |
+|---|---|---|---|
+| GET | `/health` | ヘルスチェック | no-cache |
+| GET | `/v1/quizzes` | 公開クイズ一覧（問題数・制限時間を含む） | 30 秒 + ETag |
+| GET | `/v1/quizzes/:slug` | 問題（正解・解説なし） | 30 秒 + ETag |
+| POST | `/v1/quizzes/:slug/attempts` | 全問一括の回答を採点 | no-store |
 
-- 実ドメイン、Access team domain/application AUD、D1/KV IDを環境別設定へ入れる。
-- Access policyは許可するメール/IdP groupを明示し、MFAを要求する。
-- WAF managed rules、bot対策、Worker CPU/exception alert、D1 backupをCloudflare Dashboardで設定する。
-- staging/prodでD1、KV、Access Application、Pages projectを分離する。
+管理（Service Binding 経由のみ）:
+
+| Method | Path | 内容 |
+|---|---|---|
+| GET | `/admin/quizzes` | 一覧（version・問題数を含む、最大 200 件） |
+| POST | `/admin/quizzes` | 作成（下書き） |
+| GET | `/admin/quizzes/:id` | 正解・解説を含む取得 |
+| PUT | `/admin/quizzes/:id` | 更新（`version` 必須） |
+| DELETE | `/admin/quizzes/:id` | 削除（公開中は 409 `quiz_published`） |
+| POST | `/admin/quizzes/:id/status` | `{ status: published \| archived, version }` |
+
+エラーは `{ "error": "<code>", "detail"?: {...} }`。コードと日本語メッセージの対応は
+`packages/shared/src/contracts.js` の `ERROR_MESSAGES`。
+
+## パフォーマンス
+
+- 画面はビルド不要の小さな ES Modules。`modulepreload` で読み込みの連鎖を避ける。
+- 公開クイズの取得は D1 batch 1 往復。一覧・並び順に合わせた index。
+- 公開 GET は ETag による 304。CDN（`s-maxage`）には載せない — 非公開化を即時に反映するため。
+  CDN キャッシュを導入する場合は、公開状態の変更時に purge する仕組みを先に作ること。
+- 回答の記録は `ctx.waitUntil` で応答後に行う。
+- GET では `Content-Type` を送らず、CORS preflight を発生させない。preflight 自体も `Access-Control-Max-Age` でキャッシュ。
+
+## 残っている本番判断
+
+- 実ドメイン、Access の team domain / Application AUD、D1 ID を設定する（`npm run preflight` が検出）。
+- Access policy で許可するメール / IdP グループを明示し、MFA を要求する。
+- WAF managed rules・Bot 対策（回答 API の総当たり対策）、Worker のエラー・CPU アラート、D1 のバックアップ。
+- staging / production で D1・Access Application・Pages project を分離する。
+- attempts の保持期間を決め、Cron Trigger で削除する。

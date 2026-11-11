@@ -1,6 +1,5 @@
+# qraft-web: 回答者向け画面（Cloudflare Pages、静的配信のみ）。
+# API の Origin は public/config.js と public/_headers の connect-src で指定する。
 name = "qraft-web"
 pages_build_output_dir = "public"
 compatibility_date = "2026-07-29"
-
-[vars]
-API_ORIGIN = "https://api.quiz.example.com"
