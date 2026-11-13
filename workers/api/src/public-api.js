@@ -20,9 +20,30 @@ function assertSlug(slug) {
   if (!SLUG_PATTERN.test(slug)) throw new HttpError(404, 'not_found');
 }
 
+/** 一覧の続きを指す不透明なカーソル。中身は [publishedAt, slug] の base64url。 */
+function encodeCursor({ publishedAt, slug }) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify([publishedAt, slug]))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function decodeCursor(cursor) {
+  try {
+    if (cursor.length > 256 || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw new Error('format');
+    const base64 = cursor.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(cursor.length / 4) * 4, '=');
+    const [publishedAt, slug] = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(base64), char => char.charCodeAt(0))));
+    if (typeof publishedAt !== 'string' || Number.isNaN(Date.parse(publishedAt)) || !SLUG_PATTERN.test(slug)) throw new Error('value');
+    return { publishedAt, slug };
+  } catch {
+    throw new HttpError(400, 'invalid_cursor');
+  }
+}
+
 async function listQuizzes(request, { env, cors }) {
-  const quizzes = await listPublishedQuizzes(env.DB);
-  return cacheableJson(request, { quizzes }, { cacheControl: PUBLIC_CACHE, headers: cors });
+  const cursor = new URL(request.url).searchParams.get('cursor');
+  const { quizzes, total, next } = await listPublishedQuizzes(env.DB, { after: cursor ? decodeCursor(cursor) : null });
+  return cacheableJson(request, { quizzes, total, nextCursor: next ? encodeCursor(next) : null }, { cacheControl: PUBLIC_CACHE, headers: cors });
 }
 
 async function getQuiz(request, { env, cors, params }) {

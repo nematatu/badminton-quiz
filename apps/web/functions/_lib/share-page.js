@@ -17,7 +17,8 @@ function setMeta(html, attribute, name, content) {
 
 /**
  * @param {string} html index.html の内容
- * @param {{ title: string, description: string, questionCount: number, url: string }} quiz
+ * @param {{ title: string, description: string, questionCount: number, url: string, image?: string }} quiz
+ *   image は共有カード画像の絶対URL（1200×630）。あれば X では大きい画像のカードで表示される。
  */
 export function renderSharePage(html, quiz) {
   const title = `${quiz.title} | Qraft`;
@@ -27,5 +28,12 @@ export function renderSharePage(html, quiz) {
   page = setMeta(page, 'property', 'og:title', title);
   page = setMeta(page, 'property', 'og:description', description);
   page = setMeta(page, 'property', 'og:url', quiz.url);
+  if (quiz.image) {
+    page = setMeta(page, 'property', 'og:image', quiz.image);
+    page = setMeta(page, 'property', 'og:image:width', '1200');
+    page = setMeta(page, 'property', 'og:image:height', '630');
+    page = setMeta(page, 'property', 'og:image:alt', 'Qraft — 4択クイズ');
+    page = setMeta(page, 'name', 'twitter:card', 'summary_large_image');
+  }
   return page;
 }

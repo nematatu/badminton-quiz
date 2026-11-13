@@ -5,26 +5,40 @@ import { QUIZ_STATUS } from '../../../packages/shared/src/contracts.js';
  * 入力値を文字列連結しない。複数文の書き込みは必ず 1 回の batch（= 1 トランザクション）。
  */
 
-const PUBLIC_LIST_LIMIT = 100;
+export const PUBLIC_PAGE_SIZE = 30;
 const ADMIN_LIST_LIMIT = 200;
 
 const now = () => new Date().toISOString();
 
 /* ───────────── 読み取り ───────────── */
 
-export async function listPublishedQuizzes(db) {
-  const { results } = await db
-    .prepare(
-      `SELECT slug, title, description, time_limit_seconds, published_at,
-              (SELECT COUNT(*) FROM questions WHERE quiz_id = quizzes.id) AS question_count
-         FROM quizzes
-        WHERE status = ?1
-        ORDER BY published_at DESC
-        LIMIT ?2`
-    )
-    .bind(QUIZ_STATUS.PUBLISHED, PUBLIC_LIST_LIMIT)
-    .all();
-  return results.map(row => ({
+/**
+ * 公開クイズを新しい順に 1 ページ分返す（キーセット方式）。
+ *
+ * after は前ページ最後の { publishedAt, slug }。OFFSET を使わないので、ページが進んでも
+ * 速度が落ちず、途中で公開・非公開が変わっても重複や取りこぼしが起きにくい。
+ * 同じ公開日時のクイズは slug で順序を一意にする。
+ *
+ * @returns {Promise<{ quizzes: object[], total: number, next: { publishedAt: string, slug: string } | null }>}
+ */
+export async function listPublishedQuizzes(db, { after = null, limit = PUBLIC_PAGE_SIZE } = {}) {
+  const [page, count] = await db.batch([
+    db
+      .prepare(
+        `SELECT slug, title, description, time_limit_seconds, published_at,
+                (SELECT COUNT(*) FROM questions WHERE quiz_id = quizzes.id) AS question_count
+           FROM quizzes
+          WHERE status = ?1
+            AND (?2 IS NULL OR published_at < ?2 OR (published_at = ?2 AND slug < ?3))
+          ORDER BY published_at DESC, slug DESC
+          LIMIT ?4`
+      )
+      .bind(QUIZ_STATUS.PUBLISHED, after?.publishedAt ?? null, after?.slug ?? null, limit + 1),
+    db.prepare('SELECT COUNT(*) AS n FROM quizzes WHERE status = ?1').bind(QUIZ_STATUS.PUBLISHED)
+  ]);
+  const rows = page.results.slice(0, limit);
+  const last = rows.at(-1);
+  const quizzes = rows.map(row => ({
     slug: row.slug,
     title: row.title,
     description: row.description,
@@ -32,6 +46,11 @@ export async function listPublishedQuizzes(db) {
     timeLimitSeconds: row.time_limit_seconds,
     publishedAt: row.published_at
   }));
+  return {
+    quizzes,
+    total: count.results[0].n,
+    next: page.results.length > limit ? { publishedAt: last.published_at, slug: last.slug } : null
+  };
 }
 
 export async function listAllQuizzes(db) {
