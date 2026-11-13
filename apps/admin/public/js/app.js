@@ -1,6 +1,7 @@
 import { QUIZ_STATUS, errorMessage } from '../shared/contracts.js';
 import { createToast, h, installSkipLink, mount } from '../shared/dom.js';
 import * as api from './api.js';
+import { clearDraft, debounce, loadDraft, saveDraft } from './drafts.js';
 import { createEditor } from './editor.js';
 import { insightsView } from './insights.js';
 import { listView } from './list.js';
@@ -20,8 +21,11 @@ const root = document.querySelector('#app');
 const pageTitle = document.querySelector('#page-title');
 const notify = createToast(document.querySelector('#toast'));
 
-/** 表示中の編集フォーム。未保存の変更確認に使う。 */
+/** 表示中の編集フォームと、その対象のクイズID（新規は null）。未保存の変更確認に使う。 */
 let editor = null;
+let editorQuizId = null;
+/** 表示中の編集フォームの下書き自動保存（debounce）。 */
+let autosave = null;
 let currentHash = location.hash;
 
 function setPage(title) {
@@ -130,12 +134,65 @@ async function showEditor(id) {
     }
   }
 
-  editor = createEditor(quiz, {
+  openEditor(quiz, { draft: loadDraft(quiz?.id) });
+}
+
+/**
+ * 編集フォームを表示する。draft があれば「復元／破棄」の案内を出し、
+ * restore を渡すとその下書きの内容で欄を埋める。
+ */
+function openEditor(quiz, { draft = null, restore = null } = {}) {
+  autosave?.cancel();
+  const quizId = quiz?.id ?? null;
+  editorQuizId = quizId;
+  // このフォーム自身を参照する（別の画面へ移った後に、別のクイズの下書きとして保存しない）。
+  const form = createEditor(quiz, {
+    initial: restore?.data,
+    notice: draft && !restore ? draftNotice(quiz, draft) : null,
+    onChange: () => autosave(),
     onCancel: () => navigate('#/'),
     onDelete: target => remove(target),
     onSubmit: (payload, button) => save(quiz, payload, button)
   });
+  autosave = debounce(() => {
+    if (form.isDirty()) saveDraft(quizId, quiz?.version ?? null, form.read());
+  }, 400);
+  editor = form;
   mount(root, editor.element);
+  if (restore) autosave();
+}
+
+function draftNotice(quiz, draft) {
+  const savedAt = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(draft.savedAt));
+  const outdated = quiz && draft.baseVersion !== quiz.version;
+  const notice = h(
+    'div',
+    { class: 'draft-notice', role: 'status' },
+    h(
+      'p',
+      null,
+      `保存していない編集内容があります（${savedAt} に自動保存）。`,
+      outdated && h('strong', null, 'この下書きの後にクイズが更新されています。復元して保存すると、その更新を上書きします。')
+    ),
+    h(
+      'div',
+      { class: 'draft-actions' },
+      h('button', { type: 'button', class: 'button primary', onclick: () => openEditor(quiz, { restore: draft }) }, '復元する'),
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'button',
+          onclick: () => {
+            clearDraft(quiz?.id);
+            notice.remove();
+          }
+        },
+        '破棄する'
+      )
+    )
+  );
+  return notice;
 }
 
 async function save(quiz, payload, button) {
@@ -145,12 +202,16 @@ async function save(quiz, payload, button) {
     if (quiz) await api.updateQuiz(quiz.id, payload);
     else await api.createQuiz(payload);
     editor.markClean();
+    autosave?.cancel();
+    clearDraft(quiz?.id);
     notify(quiz ? '保存しました' : '下書きとして保存しました。一覧から公開できます');
     navigate('#/');
   } catch (error) {
     if (error.code === 'edit_conflict') {
       if (confirm(`${errorMessage(error.code)}\n\n最新の内容を読み込みますか？（この画面の変更は破棄されます）`)) {
         editor.markClean();
+        autosave?.cancel();
+        clearDraft(quiz.id);
         showEditor(quiz.id);
       }
     } else if (error.status === 400) {
@@ -169,6 +230,8 @@ async function remove(quiz) {
   try {
     await api.deleteQuiz(quiz.id);
     editor.markClean();
+    autosave?.cancel();
+    clearDraft(quiz.id);
     notify('削除しました');
     navigate('#/');
   } catch (error) {
@@ -188,11 +251,16 @@ function confirmDiscard() {
 }
 
 function route() {
+  const discarding = Boolean(editor?.isDirty());
   if (!confirmDiscard()) {
     // 移動を取り消し、URL を元に戻す（replaceState は hashchange を発火しない）。
     history.replaceState(null, '', currentHash || '#/');
     return;
   }
+  // 「破棄して移動」を選んだら自動保存の下書きも消す（タブを閉じた場合は残して次回復元できる）。
+  autosave?.cancel();
+  autosave = null;
+  if (discarding) clearDraft(editorQuizId);
   currentHash = location.hash;
   editor = null;
 
@@ -206,9 +274,13 @@ function route() {
 
 window.addEventListener('hashchange', route);
 
+// ページを閉じる・再読み込みする直前に、保存待ちの下書きを書き込んでから確認を出す。
 window.addEventListener('beforeunload', event => {
+  autosave?.flush();
   if (editor?.isDirty()) event.preventDefault();
 });
+// モバイル等で beforeunload が来ない場合（タブの切り替え後に破棄される等）にも書き込む。
+window.addEventListener('pagehide', () => autosave?.flush());
 
 // Ctrl/⌘ + S で保存。
 document.addEventListener('keydown', event => {

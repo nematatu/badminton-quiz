@@ -8,14 +8,20 @@ import { h } from '../shared/dom.js';
  *   （グループ名は連番ではなく作成時の一意IDで決める）。
  * - 入力の検証はブラウザ標準の制約検証 + 重複選択肢のカスタム検証。
  *   サーバーから返った欄単位のエラーも該当欄に表示する。
- * - 未保存の変更があるかを isDirty() で返す。
+ * - 未保存の変更があるかを isDirty() で返す。変更のたびに onChange を呼ぶ（下書きの自動保存用）。
+ * - initial を渡すと、quiz ではなくその内容で欄を埋める（自動保存した下書きの復元用）。
  */
 
 let uid = 0;
 const nextId = prefix => `${prefix}-${(uid += 1)}`;
 
-export function createEditor(quiz, { onSubmit, onCancel, onDelete }) {
-  let dirty = false;
+export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, initial, notice }) {
+  let dirty = Boolean(initial);
+  const values = initial ?? quiz;
+  const changed = () => {
+    dirty = true;
+    onChange?.();
+  };
   const isNew = !quiz;
   const questions = h('ol', { class: 'question-list' });
   const addButton = h('button', { type: 'button', class: 'button', onclick: () => addQuestion() }, '＋ 問題を追加');
@@ -28,13 +34,14 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete }) {
       class: 'editor',
       novalidate: true,
       oninput: () => {
-        dirty = true;
+        changed();
       },
       onsubmit: event => {
         event.preventDefault();
         if (validate()) onSubmit(read(), submitButton);
       }
     },
+    notice,
     quiz?.status === QUIZ_STATUS.PUBLISHED &&
       h('p', { class: 'banner' }, 'このクイズは公開中です。保存した内容はすぐに回答者へ反映されます。'),
     formError,
@@ -42,8 +49,8 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete }) {
       'section',
       { class: 'panel' },
       h('h2', null, '基本情報'),
-      field('タイトル', h('input', { name: 'title', required: true, maxLength: LIMITS.title, value: quiz?.title ?? '', autocomplete: 'off' }), { counter: LIMITS.title }),
-      field('説明', h('textarea', { name: 'description', maxLength: LIMITS.description, rows: 3 }, quiz?.description ?? ''), {
+      field('タイトル', h('input', { name: 'title', required: true, maxLength: LIMITS.title, value: values?.title ?? '', autocomplete: 'off' }), { counter: LIMITS.title }),
+      field('説明', h('textarea', { name: 'description', maxLength: LIMITS.description, rows: 3 }, values?.description ?? ''), {
         counter: LIMITS.description,
         hint: '一覧と導入画面に表示されます（任意）'
       }),
@@ -56,7 +63,7 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete }) {
           min: LIMITS.timeLimitSeconds.min,
           max: LIMITS.timeLimitSeconds.max,
           step: 1,
-          value: quiz?.timeLimitSeconds ?? '',
+          value: values?.timeLimitSeconds ?? '',
           placeholder: '空欄なら制限なし'
         }),
         { hint: `クイズ全体で${LIMITS.timeLimitSeconds.min}〜${LIMITS.timeLimitSeconds.max}秒。空欄なら時間制限なし。` }
@@ -147,7 +154,7 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete }) {
     if (!sibling) return;
     if (offset < 0) sibling.before(card);
     else sibling.after(card);
-    dirty = true;
+    changed();
     refresh();
     card.querySelector(`[data-move="${offset}"]`)?.focus();
   }
@@ -158,7 +165,7 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete }) {
     addQuestion(question, { focus: false });
     const copy = questions.lastElementChild;
     card.after(copy);
-    dirty = true;
+    changed();
     refresh();
     copy.querySelector('textarea').focus();
   }
@@ -168,7 +175,7 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete }) {
     if (hasContent && !confirm('この問題を削除しますか？')) return;
     const fallback = card.nextElementSibling ?? card.previousElementSibling;
     card.remove();
-    dirty = true;
+    changed();
     refresh();
     fallback?.querySelector('textarea')?.focus();
   }
@@ -267,11 +274,12 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete }) {
     return true;
   }
 
-  for (const question of quiz?.questions ?? [null]) addQuestion(question, { focus: false });
+  for (const question of values?.questions?.length ? values.questions : [null]) addQuestion(question, { focus: false });
 
   return {
     element: form,
     isDirty: () => dirty,
+    read,
     markClean: () => {
       dirty = false;
     },

@@ -148,6 +148,10 @@ main { max-width: 1040px; }
 
 /* ── Editor ────────────────────────────────────────────────── */
 .editor { max-width: 860px; }
+.draft-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; padding: 12px 16px; border: 1px solid var(--accent); border-radius: var(--radius-m); background: var(--accent-surface); }
+.draft-notice p { margin: 0; }
+.draft-notice strong { display: block; margin-top: 4px; color: var(--danger); }
+.draft-actions { display: flex; gap: 8px; flex: none; }
 .banner { margin: 0 0 16px; padding: 12px 16px; border-radius: var(--radius-m); background: var(--warning-surface); color: var(--warning-text); font-weight: 700; }
 .form-error, .field-error { margin: 0 0 16px; padding: 10px 14px; border-radius: var(--radius-s); background: var(--danger-surface); color: var(--danger); font-weight: 700; }
 
@@ -252,6 +256,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   .quiz-table .actions-cell { grid-column: 1 / -1; }
   .row-actions { justify-content: flex-start; flex-wrap: wrap; }
   .options { grid-template-columns: 1fr; }
+  .draft-notice { flex-direction: column; align-items: stretch; }
   .panel { padding: 18px; }
   .meter-row { grid-template-columns: minmax(0, 1fr) 48px; }
   .meter-name { grid-column: 1 / -1; }
