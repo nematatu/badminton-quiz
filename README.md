@@ -49,7 +49,7 @@ npm run dev
 npm run check   # 全 JS の構文チェック・共有ファイルの同期確認
 npm test        # 単体 + 結合テスト（実 workerd + D1）
 npm run verify  # 上記 + Worker / Pages Function のビルド確認
-npm run e2e     # npm run dev 起動中に、実ブラウザで作成→公開→回答の通しテスト（要 Playwright）
+npm run e2e     # npm run dev 起動中に、実ブラウザで作成→公開→回答の通しテスト + 各画面のアクセシビリティ検査（要 Playwright）
 ```
 
 `packages/shared/src` を編集したら `npm run sync:shared` で各アプリへ反映する（忘れると `npm test` が失敗する）。

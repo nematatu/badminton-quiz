@@ -141,6 +141,7 @@ async function finish(timedOut) {
     const result = await submitAttempt(current.quiz.slug, current.submission(timedOut));
     if (session !== current) return; // 採点中に別の画面へ移動した
     current.status = 'finished';
+    announce(`採点結果: ${result.total}問中${result.score}問正解`);
     mount(
       root,
       resultView(current, result, {
@@ -196,10 +197,12 @@ function tick() {
 /* ───────────── 入力・ルーティング ───────────── */
 
 // 1〜4 / A〜D キーで選択、Enter で次へ。
+// 1 文字のショートカットは、フォーカスがクイズの領域にある時だけ有効にする（WCAG 2.1.4）。
+// ページ全体で効かせると、音声入力の言葉やスクリーンリーダーの 1 文字操作が回答として誤入力される。
 document.addEventListener('keydown', event => {
   if (session?.status !== 'playing' || event.altKey || event.ctrlKey || event.metaKey) return;
   const form = root.querySelector('.question-card');
-  if (!form) return;
+  if (!form || !root.contains(document.activeElement)) return;
   const index = '1234'.indexOf(event.key) >= 0 ? '1234'.indexOf(event.key) : 'abcd'.indexOf(event.key.toLowerCase());
   if (index >= 0 && event.key.length === 1) {
     const radio = form.querySelectorAll('input[name="answer"]')[index];
