@@ -1,6 +1,6 @@
 # Qraft 引き継ぎ資料
 
-更新: 2026-11-07（根本見直し後）
+更新: 2026-11-13
 
 ## 現在の状態
 
@@ -8,15 +8,16 @@
 - 見直しの内容と、見つけて直した不具合の一覧は [docs/REFACTORING.md](docs/REFACTORING.md)。
 - 設計（信頼境界・一貫性・キャッシュ方針）は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-検証済み:
+検証済み（すべて CI でも実行される）:
 
 | 項目 | 方法 | 結果 |
 |---|---|---|
-| 入力検証・JWT・HTTP 入出力・ルーター・Pages Function・画面の状態遷移 | `npm test`（単体） | 成功 |
-| 公開API・管理API・D1（原子性、409 競合、公開→非公開→削除、監査ログ、CORS、405） | `npm test`（Miniflare 上の workerd + D1） | 成功 |
-| Worker / Pages Function のビルド | `npm run build:api` / `build:admin` | 成功 |
-| 管理画面で作成→公開、公開画面で回答→採点（デスクトップ / モバイル / ダーク） | `npm run e2e`（Playwright、ローカル） | 成功、コンソールエラー・CSP 違反 0 |
-| 時間切れの自動採点、2 タブ同時編集の競合、未保存変更の確認 | Playwright（手動スクリプト） | 成功 |
+| 静的チェック（構文・共有ファイルの同期・ESLint） | `npm run check` | 成功 |
+| 入力検証・JWT・受付トークン・カーソル・HTTP 入出力・ルーター・Pages Functions・下書き保存・画面の状態遷移 | `npm test`（単体） | 成功 |
+| 公開API・管理API・D1（原子性、409 競合、ライフサイクル、監査ログ、統計、複製、検索とページング、受付トークン、回答記録の自動削除、CORS、405） | `npm test`（Miniflare 上の workerd + D1） | 成功 |
+| Worker / Pages Functions のビルド | `npm run build:api` / `build:admin` / `build:web` | 成功 |
+| 管理画面で作成→公開、公開画面で回答→採点（デスクトップ / モバイル / ダーク）、共有URL、分析、複製、検索、下書きの復元、遅れて届いた応答の扱い | `npm run e2e:ci`（実ブラウザ） | 成功、コンソールエラー・CSP 違反 0 |
+| アクセシビリティ（axe-core、WCAG 2.2 AA）を主要画面で検査 | `npm run e2e:ci` | 違反 0 |
 
 未検証（本番環境が必要）:
 
@@ -66,4 +67,6 @@
 - 画面で `innerHTML` 等の文字列 HTML を使わない（CSP の Trusted Types で動かなくなる）。DOM は `shared/dom.js` の `h()` で作る。
 - `packages/shared/src` を変えたら `npm run sync:shared`。
 - 各 Pages アプリ直下の `package.json` は消さない（無いと新しい wrangler が `[[services]]` を読み落とす。docs/REFACTORING.md の B15）。
+- 回答の採点は受付トークン（`attempt-session.js`）が前提。`ATTEMPT_TOKEN_SECRET` が無いと回答を開始できない。
+- 一覧系の API はキーセット方式のページング（`cursor.js`）。OFFSET や「全件取得して画面で絞り込む」に戻さない。
 - 未確認のことを「デプロイ済み」「本番で動作確認済み」と書かない。
