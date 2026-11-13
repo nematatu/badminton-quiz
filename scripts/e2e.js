@@ -102,6 +102,16 @@ const title = `E2Eクイズ ${Date.now()}`;
   await page.getByRole('link', { name: '問題一覧' }).click();
   await page.getByRole('link', { name: title }).waitFor();
 
+  // 検索と状態の絞り込みはサーバー側で行われ、該当するものだけが残る
+  await page.getByRole('searchbox', { name: 'クイズを検索' }).fill(title);
+  await page.waitForFunction(() => document.querySelectorAll('.quiz-table tbody tr').length === 1);
+  assert.match(await page.locator('.list-summary').innerText(), /^1件$/);
+  await page.getByRole('combobox', { name: '状態で絞り込み' }).selectOption('published');
+  await page.getByText('条件に合うクイズはありません。').waitFor();
+  await page.getByRole('combobox', { name: '状態で絞り込み' }).selectOption('');
+  await page.getByRole('searchbox', { name: 'クイズを検索' }).fill('');
+  await page.waitForFunction(() => document.querySelectorAll('.quiz-table tbody tr').length > 1);
+
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('row', { name: new RegExp(title) }).getByRole('button', { name: '公開する' }).click();
   await page.getByRole('row', { name: new RegExp(title) }).getByText('公開中').waitFor();

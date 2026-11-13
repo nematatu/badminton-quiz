@@ -6,7 +6,7 @@ import { QUIZ_STATUS } from '../../../packages/shared/src/contracts.js';
  */
 
 export const PUBLIC_PAGE_SIZE = 30;
-const ADMIN_LIST_LIMIT = 200;
+export const ADMIN_PAGE_SIZE = 50;
 
 const now = () => new Date().toISOString();
 
@@ -53,27 +53,53 @@ export async function listPublishedQuizzes(db, { after = null, limit = PUBLIC_PA
   };
 }
 
-export async function listAllQuizzes(db) {
-  const { results } = await db
-    .prepare(
-      `SELECT id, slug, title, status, version, updated_at, published_at,
-              (SELECT COUNT(*) FROM questions WHERE quiz_id = quizzes.id) AS question_count
-         FROM quizzes
-        ORDER BY updated_at DESC
-        LIMIT ?1`
-    )
-    .bind(ADMIN_LIST_LIMIT)
-    .all();
-  return results.map(row => ({
-    id: row.id,
-    slug: row.slug,
-    title: row.title,
-    status: row.status,
-    version: row.version,
-    questionCount: row.question_count,
-    updatedAt: row.updated_at,
-    publishedAt: row.published_at
-  }));
+/**
+ * 管理一覧。状態・キーワード（タイトル / slug の部分一致）で絞り込み、
+ * 更新日時の新しい順にキーセット方式で 1 ページずつ返す。counts は絞り込み前の状態別件数。
+ *
+ * @returns {Promise<{ quizzes: object[], total: number, counts: Record<string, number>, next: { updatedAt: string, id: string } | null }>}
+ */
+export async function listAllQuizzes(db, { status = null, keyword = '', after = null, limit = ADMIN_PAGE_SIZE } = {}) {
+  // LIKE の特殊文字（% _ \）は文字そのものとして検索する。
+  const pattern = keyword ? `%${keyword.replace(/[\\%_]/g, char => `\\${char}`)}%` : null;
+  const filter = `(?1 IS NULL OR status = ?1) AND (?2 IS NULL OR title LIKE ?2 ESCAPE '\\' OR slug LIKE ?2 ESCAPE '\\')`;
+  const [page, matching, byStatus] = await db.batch([
+    db
+      .prepare(
+        `SELECT id, slug, title, status, version, updated_at, published_at,
+                (SELECT COUNT(*) FROM questions WHERE quiz_id = quizzes.id) AS question_count
+           FROM quizzes
+          WHERE ${filter}
+            AND (?3 IS NULL OR updated_at < ?3 OR (updated_at = ?3 AND id < ?4))
+          ORDER BY updated_at DESC, id DESC
+          LIMIT ?5`
+      )
+      .bind(status, pattern, after?.updatedAt ?? null, after?.id ?? null, limit + 1),
+    db.prepare(`SELECT COUNT(*) AS n FROM quizzes WHERE ${filter}`).bind(status, pattern),
+    db.prepare('SELECT status, COUNT(*) AS n FROM quizzes GROUP BY status')
+  ]);
+  const rows = page.results.slice(0, limit);
+  const last = rows.at(-1);
+  const counts = { all: 0, draft: 0, published: 0, archived: 0 };
+  for (const row of byStatus.results) {
+    counts[row.status] = row.n;
+    counts.all += row.n;
+  }
+  return {
+    quizzes: rows.map(row => ({
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      status: row.status,
+      version: row.version,
+      questionCount: row.question_count,
+      updatedAt: row.updated_at,
+      publishedAt: row.published_at
+    })),
+    total: matching.results[0].n,
+    counts,
+    next: page.results.length > limit ? { updatedAt: last.updated_at, id: last.id } : null
+  };
 }
 
 /**

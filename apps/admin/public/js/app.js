@@ -68,8 +68,18 @@ async function showList() {
   setPage('問題一覧');
   loading();
   try {
-    const quizzes = await api.listQuizzes();
-    mount(root, listView(quizzes, { onToggleStatus: toggleStatus, onDuplicate: duplicate }));
+    const firstPage = await api.listQuizzes();
+    mount(
+      root,
+      listView(firstPage, {
+        load: query =>
+          api.listQuizzes(query).catch(error => {
+            throw new Error(errorMessage(error.code));
+          }),
+        onToggleStatus: toggleStatus,
+        onDuplicate: duplicate
+      })
+    );
   } catch (error) {
     failure(error, showList);
   }

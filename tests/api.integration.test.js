@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { purgeExpiredAttempts } from '../workers/api/src/maintenance.js';
-import { PUBLIC_PAGE_SIZE, listPublishedQuizzes, updateQuiz } from '../workers/api/src/repository.js';
+import { ADMIN_PAGE_SIZE, PUBLIC_PAGE_SIZE, listAllQuizzes, listPublishedQuizzes, updateQuiz } from '../workers/api/src/repository.js';
 import { AUDIENCE, ISSUER, createSigner } from './helpers/access.js';
 
 const root = new URL('../', import.meta.url);
@@ -363,12 +363,64 @@ describe('管理API（AdminApi エントリポイント）', () => {
     assert.deepEqual(audit.results.map(row => row.action), ['quiz.create', 'quiz.publish', 'quiz.archive', 'quiz.delete']);
   });
 
-  test('管理一覧は version と問題数を含む', async () => {
-    const { status, body } = await admin('quizzes');
+  test('管理一覧は version と問題数を含み、検索・状態で絞り込める', async () => {
+    const { status, body } = await admin(`quizzes?q=${encodeURIComponent('badminton-basics')}`);
     assert.equal(status, 200);
-    const sample = body.quizzes.find(quiz => quiz.slug === SEED_SLUG);
+    assert.equal(body.total, 1);
+    const [sample] = body.quizzes;
+    assert.equal(sample.slug, SEED_SLUG);
     assert.equal(sample.questionCount, 6);
     assert.equal(sample.version, 1);
+
+    // 状態別の件数は、絞り込みに関係なく全体の件数
+    const all = (await admin('quizzes')).body;
+    assert.equal(body.counts.all, all.counts.all);
+    assert.equal(all.counts.all, all.counts.draft + all.counts.published + all.counts.archived);
+    assert.equal(all.total, all.counts.all);
+
+    const drafts = (await admin('quizzes?status=draft')).body;
+    assert.equal(drafts.total, all.counts.draft);
+    assert.ok(drafts.quizzes.every(quiz => quiz.status === 'draft'));
+
+    // タイトルでの部分一致。LIKE の特殊文字（% _）は文字そのものとして扱う
+    await admin('quizzes', { method: 'POST', body: sampleQuiz('検索 100%_正解') });
+    await admin('quizzes', { method: 'POST', body: sampleQuiz('検索 100点の正解') });
+    const literal = (await admin(`quizzes?q=${encodeURIComponent('100%_')}`)).body;
+    assert.deepEqual(literal.quizzes.map(quiz => quiz.title), ['検索 100%_正解']);
+    const both = (await admin(`quizzes?q=${encodeURIComponent('検索 100')}&status=draft`)).body;
+    assert.equal(both.total, 2);
+    assert.equal((await admin(`quizzes?q=${encodeURIComponent('%')}`)).body.total, 1);
+
+    assert.deepEqual((await admin('quizzes?status=deleted')).body, { error: 'invalid_status' });
+    assert.equal((await admin(`quizzes?q=${'a'.repeat(81)}`)).status, 400);
+    assert.deepEqual((await admin('quizzes?cursor=!!!')).body, { error: 'invalid_cursor' });
+  });
+
+  test('管理一覧は 50 件を超えても、カーソルで全件を重複・漏れなく辿れる', async () => {
+    for (let index = 0; index < ADMIN_PAGE_SIZE + 5; index += 1) {
+      const id = `00000000-0000-4000-b000-${String(index).padStart(12, '0')}`;
+      // 同じ更新日時を混ぜ、id での並びも確かめる
+      const updatedAt = `2024-01-0${(index % 3) + 1}T00:00:00.000Z`;
+      await db
+        .prepare("INSERT INTO quizzes (id, slug, title, status, created_by, created_at, updated_at) VALUES (?1, ?2, ?3, 'archived', 'test', ?4, ?4)")
+        .bind(id, `admin-paging-${String(index).padStart(2, '0')}`, `管理ページング ${index}`, updatedAt)
+        .run();
+    }
+    const seen = [];
+    let cursor = '';
+    let pages = 0;
+    do {
+      const { body } = await admin(`quizzes?status=archived${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+      assert.ok(body.quizzes.length <= ADMIN_PAGE_SIZE);
+      seen.push(...body.quizzes.map(quiz => quiz.id));
+      cursor = body.nextCursor;
+      pages += 1;
+      if (!cursor) assert.equal(seen.length, body.total);
+    } while (cursor);
+    assert.ok(pages >= 2);
+    assert.equal(new Set(seen).size, seen.length, '重複なし');
+    const expected = (await listAllQuizzes(db, { status: 'archived', limit: 1000 })).quizzes.map(quiz => quiz.id);
+    assert.deepEqual(seen, expected);
   });
 
   test('回答統計: 現在の問題内容への回答だけで設問別の正答率と選択肢分布を出す', async () => {
