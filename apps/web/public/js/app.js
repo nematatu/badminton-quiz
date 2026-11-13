@@ -21,6 +21,15 @@ let session = null;
 let timer = 0;
 let lastAnnounced = null;
 
+/**
+ * 画面遷移の世代番号。非同期の読み込みは開始時の番号を覚えておき、応答が届いた時点で
+ * 番号が変わっていれば（＝利用者がもう別の画面へ移動していれば）結果を捨てる。
+ * これがないと、遅れて届いた応答が今の画面を古い内容で上書きしてしまう。
+ */
+let generation = 0;
+const nextGeneration = () => ++generation;
+const isCurrent = token => token === generation;
+
 function setTitle(title) {
   document.title = title ? `${title} | ${BRAND}` : `${BRAND} — 4択クイズ`;
 }
@@ -49,36 +58,44 @@ function showError(error, retry, { title = '読み込めませんでした', ret
 /* ───────────── 画面 ───────────── */
 
 async function showHome() {
+  const current = nextGeneration();
   setTitle(null);
   mount(root, loadingView());
   try {
-    mount(root, homeView(await fetchQuizzes()));
+    const quizzes = await fetchQuizzes();
+    if (isCurrent(current)) mount(root, homeView(quizzes));
   } catch (error) {
-    showError(error, showHome);
+    if (isCurrent(current)) showError(error, showHome);
   }
 }
 
 async function showQuiz(slug) {
+  const current = nextGeneration();
   mount(root, loadingView('クイズを準備しています…'));
   try {
     const quiz = await fetchQuiz(slug);
+    if (!isCurrent(current)) return;
     setTitle(quiz.title);
     mount(root, introView(quiz, { onStart: () => start(quiz) }));
   } catch (error) {
-    showError(error, () => showQuiz(slug));
+    if (isCurrent(current)) showError(error, () => showQuiz(slug));
   }
 }
 
 async function start(quiz) {
+  const current = nextGeneration();
   stopTimer();
   session = null;
   mount(root, loadingView('準備しています…'));
+  let started;
   try {
-    const started = await startSession(quiz.slug);
-    session = new QuizSession(started.quiz, started.token);
+    started = await startSession(quiz.slug);
   } catch (error) {
-    return showError(error, () => start(quiz), { title: '開始できませんでした' });
+    if (isCurrent(current)) showError(error, () => start(quiz), { title: '開始できませんでした' });
+    return;
   }
+  if (!isCurrent(current)) return;
+  session = new QuizSession(started.quiz, started.token);
   lastAnnounced = null;
   renderQuestion();
   startTimer();
@@ -205,6 +222,7 @@ function slugFromUrl() {
 }
 
 function route() {
+  nextGeneration();
   stopTimer();
   session = null;
   const slug = slugFromUrl();
