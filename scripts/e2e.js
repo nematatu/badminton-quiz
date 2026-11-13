@@ -58,7 +58,16 @@ const title = `E2Eクイズ ${Date.now()}`;
   await page.locator('.quiz-table').waitFor();
   await shot(page, 'admin-list');
 
+  // 入力途中で再読み込みしても、自動保存した下書きを復元できる
   await page.getByRole('link', { name: '新規作成' }).click();
+  await page.getByLabel('タイトル').fill('下書きの復元テスト');
+  await page.waitForTimeout(600);
+  page.once('dialog', dialog => dialog.accept());
+  await page.reload();
+  await page.getByText('保存していない編集内容があります').waitFor();
+  await page.getByRole('button', { name: '復元する' }).click();
+  assert.equal(await page.getByLabel('タイトル').inputValue(), '下書きの復元テスト');
+
   await page.getByLabel('タイトル').fill(title);
   await page.getByLabel('説明').fill('E2E テスト用');
   await page.getByLabel('制限時間（秒）').fill('60');
@@ -85,6 +94,12 @@ const title = `E2Eクイズ ${Date.now()}`;
   await shot(page, 'admin-editor');
 
   await page.getByRole('button', { name: '下書きとして保存' }).click();
+  await page.getByRole('link', { name: title }).waitFor();
+  // 保存したら下書きは消える
+  await page.getByRole('link', { name: '新規作成' }).click();
+  await page.getByLabel('タイトル').waitFor();
+  assert.equal(await page.getByText('保存していない編集内容があります').count(), 0);
+  await page.getByRole('link', { name: '問題一覧' }).click();
   await page.getByRole('link', { name: title }).waitFor();
 
   page.once('dialog', dialog => dialog.accept());
