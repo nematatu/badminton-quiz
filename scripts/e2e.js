@@ -196,6 +196,40 @@ for (const [name, options] of [
   await page.context().close();
 }
 
+/* ── 管理画面: 絞り込みを変えた直後は、前の条件の「もっと見る」を出さない（API 応答は固定） ── */
+{
+  const quiz = (index, status) => ({
+    id: `00000000-0000-4000-c000-${String(index).padStart(12, '0')}`,
+    slug: `mock-${index}`,
+    title: `モック ${index}`,
+    status,
+    version: 1,
+    questionCount: 1,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    publishedAt: null
+  });
+  const counts = { all: 3, draft: 1, published: 2, archived: 0 };
+  const page = await open('about:blank');
+  const requested = [];
+  await page.route('**/api/quizzes**', async route => {
+    const params = new URL(route.request().url()).searchParams;
+    requested.push(params.toString());
+    if (params.get('status') === 'published') {
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      return route.fulfill({ json: { quizzes: [quiz(1, 'published')], total: 2, counts, nextCursor: 'published-page-2' } });
+    }
+    return route.fulfill({ json: { quizzes: [quiz(1, 'published'), quiz(2, 'draft')], total: 3, counts, nextCursor: 'all-page-2' } });
+  });
+  await page.goto(ADMIN);
+  await page.getByRole('button', { name: 'もっと見る' }).waitFor();
+  await page.getByRole('combobox', { name: '状態で絞り込み' }).selectOption('published');
+  assert.equal(await page.getByRole('button', { name: 'もっと見る' }).isVisible(), false, '新しい条件の 1 ページ目が届くまで隠す');
+  await page.getByRole('button', { name: 'もっと見る' }).waitFor();
+  assert.deepEqual(await page.locator('.quiz-table tbody tr .status').allInnerTexts(), ['公開中']);
+  assert.ok(!requested.some(query => query.includes('status=published') && query.includes('all-page-2')), '前の条件の続き位置を新しい条件で使わない');
+  await page.context().close();
+}
+
 /* ── 公開画面: 応答待ちの間に移動したら、遅れて届いた応答で画面を上書きしない ── */
 {
   const page = await open(`${WEB}/#quiz/badminton-basics-sample`);

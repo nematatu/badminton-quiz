@@ -32,6 +32,8 @@ export function listView(firstPage, { load, onToggleStatus, onDuplicate }) {
 
   let cursor = null;
   let total = 0;
+  /** 表示中の一覧を取得した時の条件。「もっと見る」は入力欄の今の値ではなく、必ずこの条件の続きを取る。 */
+  let activeQuery = { q: '', status: '' };
   /** 検索のたびに進める番号。遅れて届いた古い検索結果で一覧を上書きしないために使う。 */
   let requestId = 0;
   let timer = 0;
@@ -52,18 +54,33 @@ export function listView(firstPage, { load, onToggleStatus, onDuplicate }) {
     return rows;
   }
 
+  /**
+   * 条件が変わった瞬間に呼ぶ。新しい 1 ページ目が届くまで「もっと見る」を出さず、
+   * 取得中だった続きの応答も捨てる（新しい条件に、前の条件の続きを混ぜないため）。
+   */
+  function invalidate() {
+    requestId += 1;
+    cursor = null;
+    moreButton.hidden = true;
+  }
+
   async function reload() {
-    const id = (requestId += 1);
+    invalidate();
+    const id = requestId;
+    const next = query();
     summary.textContent = '検索中…';
     try {
-      const page = await load(query());
-      if (id === requestId) show(page, { append: false });
+      const page = await load(next);
+      if (id !== requestId) return;
+      activeQuery = next;
+      show(page, { append: false });
     } catch (error) {
       if (id === requestId) summary.textContent = error.message;
     }
   }
 
   search.addEventListener('input', () => {
+    invalidate();
     clearTimeout(timer);
     timer = setTimeout(reload, SEARCH_DELAY_MS);
   });
@@ -75,7 +92,7 @@ export function listView(firstPage, { load, onToggleStatus, onDuplicate }) {
     const id = (requestId += 1);
     moreButton.disabled = true;
     try {
-      const page = await load({ ...query(), cursor });
+      const page = await load({ ...activeQuery, cursor });
       if (id !== requestId) return;
       const rows = show(page, { append: true });
       // 追加分の先頭へフォーカスを移し、キーボード操作で続きから操作できるようにする
