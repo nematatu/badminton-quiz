@@ -1,7 +1,7 @@
 import { errorMessage } from '../shared/contracts.js';
 import { copyText, createToast, installSkipLink, mount } from '../shared/dom.js';
 import { fetchQuiz, fetchQuizzes, startSession, submitAttempt } from './api.js';
-import { QuizSession, formatDuration } from './session.js';
+import { QuizSession, formatDuration, shareText } from './session.js';
 import { errorView, homeView, introView, loadingView, questionView, resultView } from './views.js';
 
 /**
@@ -146,6 +146,7 @@ async function finish(timedOut) {
       root,
       resultView(current, result, {
         shareUrl: shareUrl(current.quiz.slug),
+        onShare: navigator.share ? () => shareResult(current.quiz, result) : null,
         onCopy: async () => notify((await copyText(shareUrl(current.quiz.slug))) ? 'リンクをコピーしました' : 'コピーできませんでした。アドレスバーのURLをご利用ください'),
         onRetry: () => start(current.quiz)
       })
@@ -159,6 +160,15 @@ async function finish(timedOut) {
     // 通信エラー等は同じ回答でそのまま再送できる（受付トークンは採点が成功するまで有効）。
     current.status = 'playing';
     showError(error, () => finish(timedOut), { title: '採点できませんでした', retryLabel: 'もう一度送信する' });
+  }
+}
+
+/** 端末の共有メニュー（LINE・メール等）を開く。利用者が閉じた場合（AbortError）は何もしない。 */
+async function shareResult(quiz, result) {
+  try {
+    await navigator.share({ title: `${quiz.title} | ${BRAND}`, text: shareText(quiz, result), url: shareUrl(quiz.slug) });
+  } catch (error) {
+    if (error?.name !== 'AbortError') notify('共有できませんでした。リンクをコピーしてお使いください');
   }
 }
 

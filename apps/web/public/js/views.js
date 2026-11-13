@@ -1,5 +1,5 @@
 import { h } from '../shared/dom.js';
-import { describeQuiz, formatDuration, resultMessage } from './session.js';
+import { describeQuiz, formatDuration, resultMessage, shareText } from './session.js';
 
 /**
  * 画面ごとの描画関数。状態は持たず、受け取ったデータとコールバックから
@@ -189,12 +189,15 @@ export function questionView(session, { onSelect, onNext, onPrevious }) {
   );
 }
 
-export function resultView(session, result, { shareUrl, onCopy, onRetry }) {
+/**
+ * 結果画面。onShare は端末の共有メニュー（Web Share API）を開く関数。
+ * 対応していないブラウザでは null を渡し、ボタンを出さない。
+ */
+export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry }) {
   const { quiz } = session;
   const message = resultMessage(result.score, result.total);
-  const shareText = `「${quiz.title}」で${result.total}問中${result.score}問正解しました！\n#Qraft #4択クイズ`;
   // URLSearchParams は空白を + にするため、確実に解釈される %20 形式で組み立てる。
-  const intent = `https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
+  const intent = `https://x.com/intent/tweet?text=${encodeURIComponent(shareText(quiz, result))}&url=${encodeURIComponent(shareUrl)}`;
 
   const optionLabel = (question, optionIndex) => `${LETTERS[optionIndex]}. ${question.options[optionIndex]}`;
 
@@ -211,6 +214,7 @@ export function resultView(session, result, { shareUrl, onCopy, onRetry }) {
         'div',
         { class: 'actions center' },
         h('a', { class: 'button', href: intent, target: '_blank', rel: 'noopener noreferrer' }, 'Xでシェア'),
+        onShare && h('button', { type: 'button', class: 'button ghost', onclick: onShare }, 'ほかのアプリで共有'),
         h('button', { type: 'button', class: 'button ghost', onclick: onCopy }, 'リンクをコピー'),
         h('button', { type: 'button', class: 'button ghost', onclick: onRetry }, 'もう一度挑戦')
       )

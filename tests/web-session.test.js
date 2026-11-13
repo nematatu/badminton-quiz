@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { outdatedFiles } from '../scripts/sync-shared.js';
-import { QuizSession, describeQuiz, formatDuration, resultMessage } from '../apps/web/public/js/session.js';
+import { QuizSession, describeQuiz, formatDuration, resultMessage, shareText } from '../apps/web/public/js/session.js';
 
 const quiz = { slug: 's', title: 'T', timeLimitSeconds: 30, questions: [{ prompt: 'a', options: ['1', '2', '3', '4'] }, { prompt: 'b', options: ['1', '2', '3', '4'] }] };
 
@@ -29,6 +29,7 @@ test('表示用の整形', () => {
   assert.equal(describeQuiz({ questionCount: 1, timeLimitSeconds: null }), '全1問・時間制限なし');
   assert.match(resultMessage(3, 3), /パーフェクト/);
   assert.match(resultMessage(0, 3), /伸びしろ/);
+  assert.equal(shareText({ title: 'T' }, { score: 2, total: 3 }), '「T」で3問中2問正解しました！\n#Qraft #4択クイズ');
 });
 
 test('各アプリの shared/ は packages/shared/src と同期している', () => {

@@ -77,6 +77,11 @@ export function describeQuiz({ questionCount, timeLimitSeconds }) {
   return parts.join('・');
 }
 
+/** 結果を共有するときの文面（X の投稿・端末の共有メニューで共通）。 */
+export function shareText(quiz, result) {
+  return `「${quiz.title}」で${result.total}問中${result.score}問正解しました！\n#Qraft #4択クイズ`;
+}
+
 export function resultMessage(score, total) {
   const rate = total ? score / total : 0;
   if (rate === 1) return 'パーフェクト！文句なしの満点です。';
