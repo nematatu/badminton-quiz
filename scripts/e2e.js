@@ -9,7 +9,7 @@
  * SCREENSHOTS=<dir> を付けると各画面のスクリーンショットを保存する。
  */
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const WEB = process.env.WEB_URL ?? 'http://localhost:3000';
@@ -48,7 +48,26 @@ async function open(url, options = {}) {
   return page;
 }
 
-const shot = async (page, name) => shots && page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
+/**
+ * アクセシビリティの自動検査（axe-core、WCAG 2.2 AA + ベストプラクティス）。
+ * 違反が 1 件でもあれば、どの画面のどの要素かを示して失敗する。
+ * CSP でスクリプトの挿入は禁止しているため、DevTools 経由（page.evaluate）で読み込む。
+ */
+const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
+async function audit(page, name) {
+  await page.evaluate(axeSource);
+  const { violations } = await page.evaluate(() =>
+    globalThis.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] }, resultTypes: ['violations'] })
+  );
+  const report = violations.map(violation => `${violation.id}（${violation.help}）: ${violation.nodes.map(node => node.target.join(' ')).join(', ')}`);
+  assert.deepEqual(report, [], `アクセシビリティ違反: ${name}`);
+}
+
+/** 主要な画面ごとの確認点: アクセシビリティ検査と（指定時は）スクリーンショット。 */
+const shot = async (page, name) => {
+  await audit(page, name);
+  if (shots) await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
+};
 const title = `E2Eクイズ ${Date.now()}`;
 
 /* ── 管理画面: 作成 → 公開 ── */
@@ -144,6 +163,12 @@ for (const [name, options] of [
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'app');
   await page.getByRole('heading', { name: '空の色は？' }).waitFor();
 
+  // フォーカスがクイズの外にある間は、1 文字のショートカットは効かない（WCAG 2.1.4）
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('2');
+  assert.equal(await page.locator('input[name="answer"]:checked').count(), 0);
+  await page.locator('#app').focus();
+
   // 1問目はキーボード（1キー=青）で、2問目はクリックで回答する
   await page.keyboard.press('1');
   await page.getByRole('button', { name: '次の問題へ' }).click();
@@ -153,6 +178,7 @@ for (const [name, options] of [
 
   await page.getByRole('heading', { name: /いい感じ/ }).waitFor();
   assert.match(await page.locator('.score').innerText(), /1\s*\/\s*2問正解/);
+  assert.equal(await page.locator('#announcer').innerText(), '採点結果: 2問中1問正解', '得点をスクリーンリーダーへ読み上げる');
   assert.match(await page.locator('.review').innerText(), /正解\s*B\. 2/);
   const share = await page.getByRole('link', { name: 'Xでシェア' }).getAttribute('href');
   assert.match(decodeURIComponent(share), /#Qraft #4択クイズ/);

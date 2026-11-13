@@ -258,6 +258,15 @@ main { width: 100%; padding: 0 20px; }
   .hint { display: none; }
 }
 
+/* Windows のハイコントラスト等（強制カラー）: 背景色に頼る表現が消えるので、システム色で描き直す。 */
+@media (forced-colors: active) {
+  .answer:has(input:checked) { outline: 3px solid Highlight; outline-offset: -3px; }
+  .answer:has(input:checked) .answer-key { forced-color-adjust: none; background: Highlight; border-color: Highlight; color: HighlightText; }
+  .progress { border: 1px solid CanvasText; }
+  .progress::before { forced-color-adjust: none; background: Highlight; }
+  .logo { border: 1px solid CanvasText; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
