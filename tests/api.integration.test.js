@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { purgeExpiredAttempts } from '../workers/api/src/maintenance.js';
-import { updateQuiz } from '../workers/api/src/repository.js';
+import { PUBLIC_PAGE_SIZE, listPublishedQuizzes, updateQuiz } from '../workers/api/src/repository.js';
 import { AUDIENCE, ISSUER, createSigner } from './helpers/access.js';
 
 const root = new URL('../', import.meta.url);
@@ -132,6 +132,50 @@ describe('公開API', () => {
     const cached = await publicFetch(`/v1/quizzes/${SEED_SLUG}`, { headers: { 'If-None-Match': etag } });
     assert.equal(cached.status, 304);
     await cached.arrayBuffer();
+  });
+
+  test('公開一覧はページ単位で返し、カーソルで続きを重複・漏れなく辿れる', async () => {
+    // 1 ページに収まらない数を公開する（同じ公開日時のものも混ぜ、slug での並びも確かめる）
+    for (let index = 0; index < PUBLIC_PAGE_SIZE + 3; index += 1) {
+      const id = `00000000-0000-4000-9000-${String(index).padStart(12, '0')}`;
+      const publishedAt = `2025-0${(index % 3) + 1}-01T00:00:00.000Z`;
+      await db
+        .prepare("INSERT INTO quizzes (id, slug, title, status, created_by, created_at, updated_at, published_at) VALUES (?1, ?2, ?3, 'published', 'test', ?4, ?4, ?4)")
+        .bind(id, `paging-${String(index).padStart(2, '0')}`, `ページング ${index}`, publishedAt)
+        .run();
+    }
+
+    const first = await (await publicFetch('/v1/quizzes')).json();
+    assert.equal(first.quizzes.length, PUBLIC_PAGE_SIZE);
+    assert.ok(first.total > PUBLIC_PAGE_SIZE);
+    assert.equal(typeof first.nextCursor, 'string');
+
+    const seen = [...first.quizzes.map(quiz => quiz.slug)];
+    let cursor = first.nextCursor;
+    while (cursor) {
+      const page = await (await publicFetch(`/v1/quizzes?cursor=${encodeURIComponent(cursor)}`)).json();
+      seen.push(...page.quizzes.map(quiz => quiz.slug));
+      cursor = page.nextCursor;
+    }
+    assert.equal(seen.length, first.total);
+    assert.equal(new Set(seen).size, seen.length, '重複なし');
+
+    // 小さいページでも、全件を 1 度で取った結果と同じ順序になる
+    const all = (await listPublishedQuizzes(db, { limit: 1000 })).quizzes.map(quiz => quiz.slug);
+    const paged = [];
+    let after = null;
+    do {
+      const page = await listPublishedQuizzes(db, { after, limit: 4 });
+      paged.push(...page.quizzes.map(quiz => quiz.slug));
+      after = page.next;
+    } while (after);
+    assert.deepEqual(paged, all);
+    assert.deepEqual(seen, all);
+
+    for (const bad of ['not-base64!', 'e30', btoa('["x","y"]')]) {
+      const response = await publicFetch(`/v1/quizzes?cursor=${encodeURIComponent(bad)}`);
+      assert.deepEqual([response.status, (await response.json()).error], [400, 'invalid_cursor'], bad);
+    }
   });
 
   test('存在しない・不正な slug は 404', async () => {

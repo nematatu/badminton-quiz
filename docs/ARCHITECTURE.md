@@ -46,7 +46,7 @@ Internet
 | Method | Path | 内容 | キャッシュ |
 |---|---|---|---|
 | GET | `/health` | ヘルスチェック | no-cache |
-| GET | `/v1/quizzes` | 公開クイズ一覧（問題数・制限時間を含む） | 30 秒 + ETag |
+| GET | `/v1/quizzes?cursor=` | 公開クイズ一覧を新しい順に 30 件ずつ（`{ quizzes, total, nextCursor }`。キーセット方式） | 30 秒 + ETag |
 | GET | `/v1/quizzes/:slug` | 問題（正解・解説なし） | 30 秒 + ETag |
 | POST | `/v1/quizzes/:slug/sessions` | 挑戦の開始。受付トークンと、同じ版の問題（正解なし）を返す | no-store |
 | POST | `/v1/quizzes/:slug/attempts` | `{ token, answers, timedOut }` を採点（トークン 1 つにつき 1 回） | no-store |
@@ -60,6 +60,7 @@ Internet
 
 公開画面の共有URL `https://quiz…/q/<slug>` は Pages Function が返す。中身は通常の画面と同じで、
 `<title>` と OGP タグだけをクイズの内容に差し替える（X などのクローラーは JavaScript を実行しないため）。
+共有カード画像は `apps/web/public/og.png`（1200×630、全クイズ共通）で、X では大きい画像のカードになる。
 Pages の `_headers` は Function のレスポンスに適用されないので、同じセキュリティヘッダーを
 `apps/web/functions/_lib/security-headers.js` で付け、テストで `_headers` との一致を確認している。
 

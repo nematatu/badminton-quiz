@@ -16,7 +16,13 @@ export async function onRequestGet({ request, env, params }) {
   const [page, quiz] = await Promise.all([env.ASSETS.fetch(new URL('/', url)).then(response => response.text()), loadQuiz(env, slug)]);
 
   const html = quiz
-    ? renderSharePage(page, { title: quiz.title, description: quiz.description, questionCount: quiz.questions.length, url: `${url.origin}/q/${encodeURIComponent(slug)}` })
+    ? renderSharePage(page, {
+        title: quiz.title,
+        description: quiz.description,
+        questionCount: quiz.questions.length,
+        url: `${url.origin}/q/${encodeURIComponent(slug)}`,
+        image: `${url.origin}/og.png`
+      })
     : page;
   return new Response(html, {
     status: quiz ? 200 : 404,

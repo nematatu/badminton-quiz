@@ -84,7 +84,7 @@ start(
 
 /* ── 4. 公開画面: 静的配信 + _headers の適用 + /api プロキシ ── */
 
-const types = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
+const types = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const webRoot = resolve(root, 'apps/web/public');
 
 /** `_headers` の `/*` ブロックを読み、本番と同じ CSP 等で配信する（違反を手元で検出できる）。 */

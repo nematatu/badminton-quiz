@@ -64,3 +64,14 @@ test('retentionDays: 不正な設定は既定値に倒す', async () => {
   assert.equal(retentionDays({ ATTEMPT_RETENTION_DAYS: '30' }), 30);
   for (const value of ['0', '-1', 'abc', '1.5', '99999']) assert.equal(retentionDays({ ATTEMPT_RETENTION_DAYS: value }), DEFAULT_RETENTION_DAYS, value);
 });
+
+test('一覧カーソル: 最長の Unicode slug（補助面の文字 64 個）でも往復できる', async () => {
+  const { decodeCursor, encodeCursor } = await import('../workers/api/src/public-api.js');
+  const publishedAt = '2026-11-13T07:00:00.000Z';
+  for (const slug of ['simple-1a2b3c4d', '𠮷'.repeat(64), `${'𠮷'.repeat(48)}-1a2b3c4d`]) {
+    assert.match(slug, SLUG_PATTERN);
+    const cursor = encodeCursor({ publishedAt, slug });
+    assert.deepEqual(decodeCursor(cursor), { publishedAt, slug });
+  }
+  assert.throws(() => decodeCursor('A'.repeat(513)), { status: 400, code: 'invalid_cursor' });
+});

@@ -33,7 +33,8 @@ async function request(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-export const fetchQuizzes = () => request('/v1/quizzes').then(data => data.quizzes);
+/** 公開一覧の 1 ページ。cursor は前ページの nextCursor。 */
+export const fetchQuizzes = (cursor = null) => request(`/v1/quizzes${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
 
 export const fetchQuiz = slug => request(`/v1/quizzes/${encodeURIComponent(slug)}`);
 

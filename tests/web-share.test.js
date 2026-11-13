@@ -54,6 +54,9 @@ test('/q/<slug>: 公開中のクイズなら OGP 入りの画面を返す', asyn
   assert.equal(requested, 'https://qraft-api.internal/v1/quizzes/%E6%97%A5%E6%9C%AC%E3%81%AE%E9%9B%91%E5%AD%A6-1a2b');
   const html = await response.text();
   assert.match(html, /<meta property="og:title" content="バドミントン基礎クイズ \| Qraft">/);
+  assert.match(html, /<meta property="og:image" content="https:\/\/quiz.test\/og.png">/);
+  assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
+  assert.equal(html.match(/name="twitter:card"/g).length, 1);
   assert.match(html, /<meta property="og:url" content="https:\/\/quiz.test\/q\/%E6%97%A5/);
   assert.match(response.headers.get('Content-Security-Policy'), /require-trusted-types-for/);
 });

@@ -62,8 +62,17 @@ async function showHome() {
   setTitle(null);
   mount(root, loadingView());
   try {
-    const quizzes = await fetchQuizzes();
-    if (isCurrent(current)) mount(root, homeView(quizzes));
+    const page = await fetchQuizzes();
+    if (!isCurrent(current)) return;
+    mount(
+      root,
+      homeView(page, {
+        loadMore: cursor =>
+          fetchQuizzes(cursor).catch(error => {
+            throw new Error(errorMessage(error.code));
+          })
+      })
+    );
   } catch (error) {
     if (isCurrent(current)) showError(error, showHome);
   }

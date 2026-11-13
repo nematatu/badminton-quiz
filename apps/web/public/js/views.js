@@ -29,7 +29,54 @@ export function errorView({ title, message, onRetry, retryLabel = 'もう一度�
   );
 }
 
-export function homeView(quizzes) {
+function quizItem(quiz) {
+  return h(
+    'li',
+    null,
+    h(
+      'a',
+      { class: 'quiz-card', href: quizHref(quiz.slug) },
+      h('span', { class: 'quiz-card-body' }, h('strong', null, quiz.title), quiz.description && h('span', { class: 'muted' }, quiz.description)),
+      h('span', { class: 'quiz-card-meta' }, describeQuiz(quiz), h('span', { 'aria-hidden': 'true' }, ' →'))
+    )
+  );
+}
+
+/**
+ * トップ（一覧）。page は最初の 1 ページ。続きは「もっと見る」で loadMore(cursor) を呼んで追加する。
+ */
+export function homeView(page, { loadMore }) {
+  const list = h('ul', { class: 'quiz-list' }, page.quizzes.map(quizItem));
+  const status = h('p', { class: 'list-status', role: 'status' });
+  let cursor = page.nextCursor;
+  const moreButton = h(
+    'button',
+    {
+      type: 'button',
+      class: 'button ghost wide',
+      hidden: !cursor,
+      onclick: async () => {
+        moreButton.disabled = true;
+        status.textContent = '読み込み中…';
+        try {
+          const next = await loadMore(cursor);
+          const items = next.quizzes.map(quizItem);
+          list.append(...items);
+          cursor = next.nextCursor;
+          moreButton.hidden = !cursor;
+          status.textContent = `${list.children.length}件を表示中`;
+          // 追加分の先頭へフォーカスを移し、キーボード操作で続きから選べるようにする
+          items[0]?.querySelector('a').focus();
+        } catch (error) {
+          status.textContent = error.message;
+        } finally {
+          moreButton.disabled = false;
+        }
+      }
+    },
+    'もっと見る'
+  );
+
   return [
     h(
       'section',
@@ -41,25 +88,8 @@ export function homeView(quizzes) {
     h(
       'section',
       { class: 'catalog', 'aria-labelledby': 'catalog-title' },
-      h('div', { class: 'section-head' }, h('h2', { id: 'catalog-title' }, '公開中のクイズ'), h('span', { class: 'count' }, `${quizzes.length}件`)),
-      quizzes.length
-        ? h(
-            'ul',
-            { class: 'quiz-list' },
-            quizzes.map(quiz =>
-              h(
-                'li',
-                null,
-                h(
-                  'a',
-                  { class: 'quiz-card', href: quizHref(quiz.slug) },
-                  h('span', { class: 'quiz-card-body' }, h('strong', null, quiz.title), quiz.description && h('span', { class: 'muted' }, quiz.description)),
-                  h('span', { class: 'quiz-card-meta' }, describeQuiz(quiz), h('span', { 'aria-hidden': 'true' }, ' →'))
-                )
-              )
-            )
-          )
-        : h('p', { class: 'empty' }, '公開中のクイズはまだありません。')
+      h('div', { class: 'section-head' }, h('h2', { id: 'catalog-title' }, '公開中のクイズ'), h('span', { class: 'count' }, `${page.total}件`)),
+      page.quizzes.length ? [list, moreButton, status] : h('p', { class: 'empty' }, '公開中のクイズはまだありません。')
     )
   ];
 }
