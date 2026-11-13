@@ -13,7 +13,7 @@ import { HttpError, decodeParam, pathnameOf } from './http.js';
 export function createRouter(routes) {
   const compiled = routes.map(([method, pattern, handler]) => ({ method, handler, ...compile(pattern) }));
 
-  return async function route(request, context) {
+  return async function dispatch(request, context) {
     const path = pathnameOf(request);
     const allowed = [];
     for (const route of compiled) {
