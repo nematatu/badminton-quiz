@@ -27,3 +27,21 @@ jobs:
         run: npm run build:api && npm run build:admin && npm run build:web
         env:
           WRANGLER_SEND_METRICS: 'false'
+
+  e2e:
+    name: e2e（実ブラウザ・アクセシビリティ検査）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Chromium のインストール
+        run: npx playwright install --with-deps chromium
+      - name: 開発環境を起動して E2E を実行
+        run: npm run e2e:ci
+        env:
+          WRANGLER_SEND_METRICS: 'false'
