@@ -72,7 +72,8 @@ start(
     '--var', 'ENVIRONMENT:development',
     '--var', `ALLOWED_ORIGINS:http://localhost:${ports.web}`,
     '--var', `ACCESS_TEAM_DOMAIN:${ISSUER}`,
-    '--var', `ACCESS_AUD:${AUDIENCE}`
+    '--var', `ACCESS_AUD:${AUDIENCE}`,
+    '--var', `ATTEMPT_TOKEN_SECRET:${randomUUID()}${randomUUID()}`
   ],
   root
 );

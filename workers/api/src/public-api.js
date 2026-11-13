@@ -1,4 +1,5 @@
 import { SLUG_PATTERN } from '../../../packages/shared/src/contracts.js';
+import { issueSession, verifySession } from './attempt-session.js';
 import { HttpError, cacheableJson, json, readJson } from './http.js';
 import { enforceAttemptRateLimit } from './rate-limit.js';
 import { findPublishedQuizBySlug, listPublishedQuizzes, recordAttempt, toPublicQuiz } from './repository.js';
@@ -32,10 +33,23 @@ async function getQuiz(request, { env, cors, params }) {
 }
 
 /**
- * 全問の回答を一括で受け取り、サーバー側で採点する。
- * 正解と解説は、この採点結果としてのみ返す。
+ * 挑戦の開始。採点時に必要な受付トークンを発行する（attempt-session.js）。
+ * トークンと同じ版の問題を一緒に返し、画面はこの問題で回答させる
+ * （キャッシュされた古い問題と新しい版のトークンが食い違わないように）。
  */
-async function submitAttempt(request, { env, ctx, cors, params }) {
+async function startSession(request, { env, cors, params }) {
+  assertSlug(params.slug);
+  await enforceAttemptRateLimit(request, env, `${params.slug}:start`);
+  const quiz = await findPublishedQuizBySlug(env.DB, params.slug);
+  if (!quiz) throw new HttpError(404, 'not_found');
+  return json({ ...(await issueSession(env, quiz)), quiz: toPublicQuiz(quiz) }, { status: 201, headers: cors });
+}
+
+/**
+ * 全問の回答を一括で受け取り、サーバー側で採点する。
+ * 正解と解説は、この採点結果としてのみ返す。受付トークン 1 つにつき 1 回だけ。
+ */
+async function submitAttempt(request, { env, cors, params }) {
   assertSlug(params.slug);
   await enforceAttemptRateLimit(request, env, params.slug);
   const body = await readJson(request, ATTEMPT_MAX_BYTES);
@@ -43,6 +57,7 @@ async function submitAttempt(request, { env, ctx, cors, params }) {
   const quiz = await findPublishedQuizBySlug(env.DB, params.slug);
   if (!quiz) throw new HttpError(404, 'not_found');
 
+  const sessionId = await verifySession(env, body?.token, quiz);
   const { answers } = validateAnswers(body, quiz.questions.length);
   const details = quiz.questions.map((question, index) => ({
     selectedIndex: answers[index],
@@ -52,12 +67,9 @@ async function submitAttempt(request, { env, ctx, cors, params }) {
   }));
   const score = details.filter(detail => detail.correct).length;
 
-  // 集計用の記録は応答を待たせずに行う。失敗しても採点結果は返す。
-  ctx.waitUntil(
-    recordAttempt(env.DB, { quizId: quiz.id, contentVersion: quiz.contentVersion, score, total: details.length, answers }).catch(error =>
-      console.error(JSON.stringify({ event: 'attempt_record_failed', message: String(error?.message ?? error) }))
-    )
-  );
+  // 記録が「この挑戦の採点は 1 回だけ」の保証を兼ねるので、応答の前に書き込む。
+  const recorded = await recordAttempt(env.DB, { quizId: quiz.id, sessionId, contentVersion: quiz.contentVersion, score, total: details.length, answers });
+  if (!recorded) throw new HttpError(409, 'attempt_already_submitted');
 
   return json({ score, total: details.length, details }, { status: 201, headers: cors });
 }
@@ -70,6 +82,7 @@ export const publicRouter = createRouter([
   ['GET', '/health', health],
   ['GET', '/v1/quizzes', listQuizzes],
   ['GET', '/v1/quizzes/:slug', getQuiz],
+  ['POST', '/v1/quizzes/:slug/sessions', startSession],
   ['POST', '/v1/quizzes/:slug/attempts', submitAttempt]
 ]);
 

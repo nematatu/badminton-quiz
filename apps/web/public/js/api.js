@@ -10,6 +10,9 @@ export class ApiError extends Error {
   }
 }
 
+/** 応答が無いまま待たせ続けないための上限。超えたら通信エラーとして扱う。 */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 /**
  * 公開APIの呼び出し。GET には Content-Type を付けない（CORS の preflight を発生させない）。
  */
@@ -19,7 +22,8 @@ async function request(path, { method = 'GET', body } = {}) {
     response = await fetch(`${API_ORIGIN.replace(/\/$/, '')}${path}`, {
       method,
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
   } catch {
     throw new ApiError('network_error', 0);
@@ -33,5 +37,8 @@ export const fetchQuizzes = () => request('/v1/quizzes').then(data => data.quizz
 
 export const fetchQuiz = slug => request(`/v1/quizzes/${encodeURIComponent(slug)}`);
 
-export const submitAttempt = (slug, { answers, timedOut }) =>
-  request(`/v1/quizzes/${encodeURIComponent(slug)}/attempts`, { method: 'POST', body: { answers, timedOut } });
+/** 挑戦を開始し、採点に必要な受付トークンと、そのトークンに対応する問題を受け取る。 */
+export const startSession = slug => request(`/v1/quizzes/${encodeURIComponent(slug)}/sessions`, { method: 'POST', body: {} });
+
+export const submitAttempt = (slug, { token, answers, timedOut }) =>
+  request(`/v1/quizzes/${encodeURIComponent(slug)}/attempts`, { method: 'POST', body: { token, answers, timedOut } });

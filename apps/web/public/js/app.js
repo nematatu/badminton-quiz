@@ -1,6 +1,6 @@
 import { errorMessage } from '../shared/contracts.js';
 import { copyText, createToast, installSkipLink, mount } from '../shared/dom.js';
-import { fetchQuiz, fetchQuizzes, submitAttempt } from './api.js';
+import { fetchQuiz, fetchQuizzes, startSession, submitAttempt } from './api.js';
 import { QuizSession, formatDuration } from './session.js';
 import { errorView, homeView, introView, loadingView, questionView, resultView } from './views.js';
 
@@ -21,6 +21,15 @@ let session = null;
 let timer = 0;
 let lastAnnounced = null;
 
+/**
+ * 画面遷移の世代番号。非同期の読み込みは開始時の番号を覚えておき、応答が届いた時点で
+ * 番号が変わっていれば（＝利用者がもう別の画面へ移動していれば）結果を捨てる。
+ * これがないと、遅れて届いた応答が今の画面を古い内容で上書きしてしまう。
+ */
+let generation = 0;
+const nextGeneration = () => ++generation;
+const isCurrent = token => token === generation;
+
 function setTitle(title) {
   document.title = title ? `${title} | ${BRAND}` : `${BRAND} — 4択クイズ`;
 }
@@ -29,15 +38,19 @@ function announce(message) {
   announcer.textContent = message;
 }
 
-function showError(error, retry) {
+/** 同じ挑戦では再送信しても通らない採点エラー。最初からやり直してもらう。 */
+const RESTART_REQUIRED = new Set(['quiz_updated', 'attempt_expired', 'attempt_already_submitted', 'invalid_session', 'invalid_answers']);
+
+function showError(error, retry, { title = '読み込めませんでした', retryLabel } = {}) {
   const notFound = error.code === 'not_found';
   setTitle(notFound ? 'クイズが見つかりません' : 'エラー');
   mount(
     root,
     errorView({
-      title: notFound ? 'クイズが見つかりません' : '読み込めませんでした',
+      title: notFound ? 'クイズが見つかりません' : title,
       message: errorMessage(error.code),
-      onRetry: notFound ? null : retry
+      onRetry: notFound ? null : retry,
+      retryLabel
     })
   );
 }
@@ -45,28 +58,44 @@ function showError(error, retry) {
 /* ───────────── 画面 ───────────── */
 
 async function showHome() {
+  const current = nextGeneration();
   setTitle(null);
   mount(root, loadingView());
   try {
-    mount(root, homeView(await fetchQuizzes()));
+    const quizzes = await fetchQuizzes();
+    if (isCurrent(current)) mount(root, homeView(quizzes));
   } catch (error) {
-    showError(error, showHome);
+    if (isCurrent(current)) showError(error, showHome);
   }
 }
 
 async function showQuiz(slug) {
+  const current = nextGeneration();
   mount(root, loadingView('クイズを準備しています…'));
   try {
     const quiz = await fetchQuiz(slug);
+    if (!isCurrent(current)) return;
     setTitle(quiz.title);
     mount(root, introView(quiz, { onStart: () => start(quiz) }));
   } catch (error) {
-    showError(error, () => showQuiz(slug));
+    if (isCurrent(current)) showError(error, () => showQuiz(slug));
   }
 }
 
-function start(quiz) {
-  session = new QuizSession(quiz);
+async function start(quiz) {
+  const current = nextGeneration();
+  stopTimer();
+  session = null;
+  mount(root, loadingView('準備しています…'));
+  let started;
+  try {
+    started = await startSession(quiz.slug);
+  } catch (error) {
+    if (isCurrent(current)) showError(error, () => start(quiz), { title: '開始できませんでした' });
+    return;
+  }
+  if (!isCurrent(current)) return;
+  session = new QuizSession(started.quiz, started.token);
   lastAnnounced = null;
   renderQuestion();
   startTimer();
@@ -113,8 +142,13 @@ async function finish(timedOut) {
     );
   } catch (error) {
     if (session !== current) return;
+    if (RESTART_REQUIRED.has(error.code)) {
+      current.status = 'finished';
+      return showError(error, () => showQuiz(current.quiz.slug), { title: '採点できませんでした', retryLabel: '最初から挑戦する' });
+    }
+    // 通信エラー等は同じ回答でそのまま再送できる（受付トークンは採点が成功するまで有効）。
     current.status = 'playing';
-    showError(error, () => finish(timedOut));
+    showError(error, () => finish(timedOut), { title: '採点できませんでした', retryLabel: 'もう一度送信する' });
   }
 }
 
@@ -188,6 +222,7 @@ function slugFromUrl() {
 }
 
 function route() {
+  nextGeneration();
   stopTimer();
   session = null;
   const slug = slugFromUrl();

@@ -171,6 +171,22 @@ for (const [name, options] of [
   await page.context().close();
 }
 
+/* ── 公開画面: 応答待ちの間に移動したら、遅れて届いた応答で画面を上書きしない ── */
+{
+  const page = await open(`${WEB}/#quiz/badminton-basics-sample`);
+  await page.route('**/v1/quizzes/*/sessions', async route => {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+  await page.getByRole('button', { name: 'はじめる' }).click();
+  await page.getByText('準備しています').waitFor();
+  await page.getByRole('link', { name: 'Qraft ホーム' }).click();
+  await page.getByRole('heading', { name: '公開中のクイズ' }).waitFor();
+  await page.waitForTimeout(2500);
+  assert.equal(await page.locator('.question-card').count(), 0, '一覧のまま');
+  await page.context().close();
+}
+
 await browser.close();
 assert.deepEqual(problems, [], 'コンソールエラー・CSP 違反がないこと');
 console.log('e2e: OK');
