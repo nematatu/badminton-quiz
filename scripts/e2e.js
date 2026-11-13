@@ -147,6 +147,15 @@ for (const [name, options] of [
   const page = await open(WEB, options);
   await page.getByRole('heading', { name: '公開中のクイズ' }).waitFor();
   await shot(page, `web-${name}-home`);
+  // モバイルでは端末の共有メニュー（Web Share API）がある想定にする（テスト用のブラウザには無い）
+  if (name === 'mobile') {
+    await page.evaluate(() => {
+      window.sharedData = [];
+      navigator.share = async data => {
+        window.sharedData.push(data);
+      };
+    });
+  }
 
   await page.getByRole('link', { name: new RegExp(title) }).click();
   await page.getByRole('button', { name: 'はじめる' }).click();
@@ -184,6 +193,17 @@ for (const [name, options] of [
   assert.match(decodeURIComponent(share), /#Qraft #4択クイズ/);
   const shareUrl = new URL(share).searchParams.get('url');
   assert.match(shareUrl, /\/q\/[^/#]+$/, '共有URLは OGP の入る /q/<slug> 形式');
+  // 共有メニューに対応した端末でだけ「ほかのアプリで共有」を出し、結果の文面と共有URLを渡す
+  const nativeShare = page.getByRole('button', { name: 'ほかのアプリで共有' });
+  if (name === 'mobile') {
+    await nativeShare.click();
+    const [shared] = await page.evaluate(() => window.sharedData);
+    assert.equal(shared.url, shareUrl);
+    assert.match(shared.text, /2問中1問正解/);
+    assert.equal(shared.title, `${title} | Qraft`);
+  } else {
+    assert.equal(await nativeShare.count(), 0);
+  }
   await shot(page, `web-${name}-result`);
 
   // 共有URLを開くと同じクイズの導入画面になり、HTML にはクイズ名の OGP が入っている
