@@ -163,12 +163,12 @@ describe('公開API', () => {
     // 小さいページでも、全件を 1 度で取った結果と同じ順序になる
     const all = (await listPublishedQuizzes(db, { limit: 1000 })).quizzes.map(quiz => quiz.slug);
     const paged = [];
-    let after = null;
+    let cursorAfter = null;
     do {
-      const page = await listPublishedQuizzes(db, { after, limit: 4 });
+      const page = await listPublishedQuizzes(db, { after: cursorAfter, limit: 4 });
       paged.push(...page.quizzes.map(quiz => quiz.slug));
-      after = page.next;
-    } while (after);
+      cursorAfter = page.next;
+    } while (cursorAfter);
     assert.deepEqual(paged, all);
     assert.deepEqual(seen, all);
 
@@ -187,7 +187,7 @@ describe('公開API', () => {
   });
 
   test('サーバー採点: 正解・解説・選んだ回答を返し、attempt を記録する', async () => {
-    const before = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
+    const countBefore = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
     const response = await submit(SEED_SLUG, { answers: [...SEED_ANSWERS.slice(0, 5), 0] });
     assert.equal(response.status, 201);
     const result = await response.json();
@@ -195,7 +195,7 @@ describe('公開API', () => {
     assert.equal(result.total, 6);
     assert.deepEqual(result.details[5], { selectedIndex: 0, correctIndex: 3, correct: false, explanation: result.details[5].explanation });
     const afterCount = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
-    assert.equal(afterCount.n, before.n + 1);
+    assert.equal(afterCount.n, countBefore.n + 1);
   });
 
   test('時間切れ送信だけ未回答を許す', async () => {
@@ -222,13 +222,13 @@ describe('公開API', () => {
     const { body: quiz } = await admin('quizzes', { method: 'POST', body: sampleQuiz('回答中に更新') });
     await admin(`quizzes/${quiz.id}/status`, { method: 'POST', body: { status: 'published', version: 1 } });
     const slug = encodeURIComponent(quiz.slug);
-    const before = await startSession(slug);
+    const staleToken = await startSession(slug);
     // 別のクイズの受付トークンは使えない
-    const otherQuiz = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { token: before, answers: SEED_ANSWERS });
+    const otherQuiz = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { token: staleToken, answers: SEED_ANSWERS });
     assert.deepEqual([otherQuiz.status, (await otherQuiz.json()).error], [400, 'invalid_session']);
     // 回答中に問題が編集されたら、新しい問題で採点せず 409
     await admin(`quizzes/${quiz.id}`, { method: 'PUT', body: { ...sampleQuiz('回答中に更新'), version: 2 } });
-    const stale = await postJson(`/v1/quizzes/${slug}/attempts`, { token: before, answers: [1, 0] });
+    const stale = await postJson(`/v1/quizzes/${slug}/attempts`, { token: staleToken, answers: [1, 0] });
     assert.deepEqual([stale.status, (await stale.json()).error], [409, 'quiz_updated']);
   });
 
@@ -477,18 +477,18 @@ describe('管理API（AdminApi エントリポイント）', () => {
 
   test('保持期間を過ぎた回答記録だけを削除する', async () => {
     await db.prepare("INSERT INTO attempts (id, quiz_id, score, total, answers_json, created_at) VALUES ('old-attempt', ?1, 0, 6, '[]', '2020-01-01T00:00:00.000Z')").bind('00000000-0000-4000-8000-000000000001').run();
-    const before = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
+    const countBefore = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
     const deleted = await purgeExpiredAttempts({ DB: db, ATTEMPT_RETENTION_DAYS: '30' });
     assert.equal(deleted, 1);
-    const after = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
-    assert.equal(after.n, before.n - 1);
+    const countAfter = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
+    assert.equal(countAfter.n, countBefore.n - 1);
   });
 
   test('Access の鍵がローテーションされても、JWKS を取り直して受け付ける', async () => {
-    const before = jwksRequests;
+    const requestsBefore = jwksRequests;
     signer = createSigner('k2');
     // 直近 30 秒以内に取得済みなので最初は未知の kid として拒否される
     assert.equal((await admin('quizzes')).status, 401);
-    assert.equal(jwksRequests, before);
+    assert.equal(jwksRequests, requestsBefore);
   });
 });
