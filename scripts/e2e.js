@@ -61,7 +61,7 @@ const title = `E2Eクイズ ${Date.now()}`;
   // 入力途中で再読み込みしても、自動保存した下書きを復元できる
   await page.getByRole('link', { name: '新規作成' }).click();
   await page.getByLabel('タイトル').fill('下書きの復元テスト');
-  await page.waitForTimeout(600);
+  // 自動保存の待ち時間（0.4 秒）を待たずに再読み込みしても、閉じる直前に書き込まれる
   page.once('dialog', dialog => dialog.accept());
   await page.reload();
   await page.getByText('保存していない編集内容があります').waitFor();

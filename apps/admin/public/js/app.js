@@ -24,6 +24,8 @@ const notify = createToast(document.querySelector('#toast'));
 /** 表示中の編集フォームと、その対象のクイズID（新規は null）。未保存の変更確認に使う。 */
 let editor = null;
 let editorQuizId = null;
+/** 表示中の編集フォームの下書き自動保存（debounce）。 */
+let autosave = null;
 let currentHash = location.hash;
 
 function setPage(title) {
@@ -140,18 +142,22 @@ async function showEditor(id) {
  * restore を渡すとその下書きの内容で欄を埋める。
  */
 function openEditor(quiz, { draft = null, restore = null } = {}) {
-  editorQuizId = quiz?.id ?? null;
-  const autosave = debounce(() => {
-    if (editor?.isDirty()) saveDraft(editorQuizId, quiz?.version ?? null, editor.read());
-  }, 400);
-  editor = createEditor(quiz, {
+  autosave?.cancel();
+  const quizId = quiz?.id ?? null;
+  editorQuizId = quizId;
+  // このフォーム自身を参照する（別の画面へ移った後に、別のクイズの下書きとして保存しない）。
+  const form = createEditor(quiz, {
     initial: restore?.data,
     notice: draft && !restore ? draftNotice(quiz, draft) : null,
-    onChange: autosave,
+    onChange: () => autosave(),
     onCancel: () => navigate('#/'),
     onDelete: target => remove(target),
     onSubmit: (payload, button) => save(quiz, payload, button)
   });
+  autosave = debounce(() => {
+    if (form.isDirty()) saveDraft(quizId, quiz?.version ?? null, form.read());
+  }, 400);
+  editor = form;
   mount(root, editor.element);
   if (restore) autosave();
 }
@@ -196,6 +202,7 @@ async function save(quiz, payload, button) {
     if (quiz) await api.updateQuiz(quiz.id, payload);
     else await api.createQuiz(payload);
     editor.markClean();
+    autosave?.cancel();
     clearDraft(quiz?.id);
     notify(quiz ? '保存しました' : '下書きとして保存しました。一覧から公開できます');
     navigate('#/');
@@ -203,6 +210,7 @@ async function save(quiz, payload, button) {
     if (error.code === 'edit_conflict') {
       if (confirm(`${errorMessage(error.code)}\n\n最新の内容を読み込みますか？（この画面の変更は破棄されます）`)) {
         editor.markClean();
+        autosave?.cancel();
         clearDraft(quiz.id);
         showEditor(quiz.id);
       }
@@ -222,6 +230,7 @@ async function remove(quiz) {
   try {
     await api.deleteQuiz(quiz.id);
     editor.markClean();
+    autosave?.cancel();
     clearDraft(quiz.id);
     notify('削除しました');
     navigate('#/');
@@ -249,6 +258,8 @@ function route() {
     return;
   }
   // 「破棄して移動」を選んだら自動保存の下書きも消す（タブを閉じた場合は残して次回復元できる）。
+  autosave?.cancel();
+  autosave = null;
   if (discarding) clearDraft(editorQuizId);
   currentHash = location.hash;
   editor = null;
@@ -263,9 +274,13 @@ function route() {
 
 window.addEventListener('hashchange', route);
 
+// ページを閉じる・再読み込みする直前に、保存待ちの下書きを書き込んでから確認を出す。
 window.addEventListener('beforeunload', event => {
+  autosave?.flush();
   if (editor?.isDirty()) event.preventDefault();
 });
+// モバイル等で beforeunload が来ない場合（タブの切り替え後に破棄される等）にも書き込む。
+window.addEventListener('pagehide', () => autosave?.flush());
 
 // Ctrl/⌘ + S で保存。
 document.addEventListener('keydown', event => {

@@ -40,11 +40,28 @@ export function clearDraft(quizId) {
   }
 }
 
-/** 連続した入力をまとめて、最後の入力から wait ミリ秒後に 1 回だけ実行する。 */
+/**
+ * 連続した入力をまとめて、最後の入力から wait ミリ秒後に 1 回だけ実行する。
+ * flush() は待っている実行を今すぐ行い（ページを閉じる直前用）、cancel() は取り消す。
+ */
 export function debounce(fn, wait) {
   let timer = 0;
-  return (...args) => {
+  let pending = false;
+  const run = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), wait);
+    if (!pending) return;
+    pending = false;
+    fn();
   };
+  const call = () => {
+    pending = true;
+    clearTimeout(timer);
+    timer = setTimeout(run, wait);
+  };
+  call.flush = run;
+  call.cancel = () => {
+    clearTimeout(timer);
+    pending = false;
+  };
+  return call;
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import { clearDraft, loadDraft, saveDraft } from '../apps/admin/public/js/drafts.js';
+import { clearDraft, debounce, loadDraft, saveDraft } from '../apps/admin/public/js/drafts.js';
 
 // ブラウザの localStorage の代わり
 const store = new Map();
@@ -41,4 +41,30 @@ test('壊れた値や localStorage が使えない環境では null を返し、
   } finally {
     globalThis.localStorage = original;
   }
+});
+
+test('debounce: 連続呼び出しは 1 回にまとめ、flush で即時実行、cancel で取り消し', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let calls = 0;
+  const save = debounce(() => (calls += 1), 400);
+
+  save();
+  save();
+  t.mock.timers.tick(399);
+  assert.equal(calls, 0);
+  t.mock.timers.tick(1);
+  assert.equal(calls, 1);
+
+  save();
+  save.flush(); // ページを閉じる直前
+  assert.equal(calls, 2);
+  t.mock.timers.tick(1000);
+  assert.equal(calls, 2, 'flush 後にタイマーで二重に実行しない');
+  save.flush();
+  assert.equal(calls, 2, '待っている実行が無ければ flush は何もしない');
+
+  save();
+  save.cancel(); // 画面の移動・保存の成功
+  t.mock.timers.tick(1000);
+  assert.equal(calls, 2);
 });
