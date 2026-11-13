@@ -38,7 +38,15 @@ async function request(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-export const listQuizzes = () => request('quizzes').then(data => data.quizzes);
+/** 一覧の 1 ページ。q（検索語）・status・cursor（前ページの nextCursor）は省略可。 */
+export function listQuizzes({ q = '', status = '', cursor = '' } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  if (cursor) params.set('cursor', cursor);
+  const query = params.toString();
+  return request(`quizzes${query ? `?${query}` : ''}`);
+}
 export const getQuiz = id => request(`quizzes/${encodeURIComponent(id)}`);
 export const createQuiz = quiz => request('quizzes', { method: 'POST', body: quiz });
 export const updateQuiz = (id, quiz) => request(`quizzes/${encodeURIComponent(id)}`, { method: 'PUT', body: quiz });

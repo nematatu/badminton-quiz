@@ -1,5 +1,6 @@
 import { SLUG_PATTERN } from '../../../packages/shared/src/contracts.js';
 import { issueSession, verifySession } from './attempt-session.js';
+import { decodeCursor as decodeListCursor, encodeCursor as encodeListCursor, isTimestamp } from './cursor.js';
 import { HttpError, cacheableJson, json, readJson } from './http.js';
 import { enforceAttemptRateLimit } from './rate-limit.js';
 import { findPublishedQuizBySlug, listPublishedQuizzes, recordAttempt, toPublicQuiz } from './repository.js';
@@ -20,31 +21,12 @@ function assertSlug(slug) {
   if (!SLUG_PATTERN.test(slug)) throw new HttpError(404, 'not_found');
 }
 
-/**
- * カーソル文字列の上限。slug は最大 64 コードポイント × UTF-8 で最大 4 バイト = 256 バイト、
- * 公開日時と JSON の記号を足しても 320 バイト未満なので、base64url で 428 文字に収まる。
- * 余裕を持たせつつ、巨大な入力は解析前に拒否する。
- */
-const MAX_CURSOR_LENGTH = 512;
-
-/** 一覧の続きを指す不透明なカーソル。中身は [publishedAt, slug] の base64url。 */
-export function encodeCursor({ publishedAt, slug }) {
-  return btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify([publishedAt, slug]))))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
+/** 公開一覧のカーソル: [publishedAt, slug]。 */
+export const encodeCursor = ({ publishedAt, slug }) => encodeListCursor([publishedAt, slug]);
 
 export function decodeCursor(cursor) {
-  try {
-    if (cursor.length > MAX_CURSOR_LENGTH || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw new Error('format');
-    const base64 = cursor.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(cursor.length / 4) * 4, '=');
-    const [publishedAt, slug] = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(base64), char => char.charCodeAt(0))));
-    if (typeof publishedAt !== 'string' || Number.isNaN(Date.parse(publishedAt)) || !SLUG_PATTERN.test(slug)) throw new Error('value');
-    return { publishedAt, slug };
-  } catch {
-    throw new HttpError(400, 'invalid_cursor');
-  }
+  const [publishedAt, slug] = decodeListCursor(cursor, ([time, value]) => isTimestamp(time) && typeof value === 'string' && SLUG_PATTERN.test(value));
+  return { publishedAt, slug };
 }
 
 async function listQuizzes(request, { env, cors }) {
