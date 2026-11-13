@@ -6,7 +6,7 @@ import { QuizSession, describeQuiz, formatDuration, resultMessage } from '../app
 const quiz = { slug: 's', title: 'T', timeLimitSeconds: 30, questions: [{ prompt: 'a', options: ['1', '2', '3', '4'] }, { prompt: 'b', options: ['1', '2', '3', '4'] }] };
 
 test('QuizSession: 回答・移動・時間切れ送信', () => {
-  const session = new QuizSession(quiz, 1_000);
+  const session = new QuizSession(quiz, 'token-1', 1_000);
   assert.equal(session.remainingSeconds(1_000), 30);
   assert.equal(session.remainingSeconds(40_000), 0);
   assert.equal(session.hasProgress, false);
@@ -20,7 +20,7 @@ test('QuizSession: 回答・移動・時間切れ送信', () => {
   assert.equal(session.index, 1);
   assert.equal(session.isLast, true);
 
-  assert.deepEqual(session.submission(true), { answers: [2, -1], timedOut: true });
+  assert.deepEqual(session.submission(true), { token: 'token-1', answers: [2, -1], timedOut: true });
 });
 
 test('表示用の整形', () => {

@@ -6,8 +6,13 @@ import { UNANSWERED } from '../shared/contracts.js';
  *   playing ──(最後の問題で回答 / 時間切れ)──▶ submitting ──▶ finished
  */
 export class QuizSession {
-  constructor(quiz, now = Date.now()) {
+  /**
+   * @param {object} quiz 公開APIのクイズ
+   * @param {string} token サーバーが発行した受付トークン（採点時に送る）
+   */
+  constructor(quiz, token, now = Date.now()) {
     this.quiz = quiz;
+    this.token = token;
     this.index = 0;
     this.answers = Array(quiz.questions.length).fill(null);
     this.deadline = quiz.timeLimitSeconds ? now + quiz.timeLimitSeconds * 1000 : null;
@@ -49,7 +54,7 @@ export class QuizSession {
 
   /** 送信用の回答。時間切れなら未回答を UNANSWERED で埋める。 */
   submission(timedOut) {
-    return { answers: this.answers.map(answer => answer ?? UNANSWERED), timedOut };
+    return { token: this.token, answers: this.answers.map(answer => answer ?? UNANSWERED), timedOut };
   }
 }
 

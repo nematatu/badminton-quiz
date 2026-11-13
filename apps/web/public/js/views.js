@@ -14,7 +14,7 @@ export function loadingView(message = '読み込み中…') {
   return h('div', { class: 'status-view', role: 'status', 'aria-busy': 'true' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), message);
 }
 
-export function errorView({ title, message, onRetry }) {
+export function errorView({ title, message, onRetry, retryLabel = 'もう一度読み込む' }) {
   return h(
     'section',
     { class: 'status-view' },
@@ -23,7 +23,7 @@ export function errorView({ title, message, onRetry }) {
     h(
       'div',
       { class: 'actions center' },
-      onRetry && h('button', { type: 'button', class: 'button', onclick: onRetry }, 'もう一度読み込む'),
+      onRetry && h('button', { type: 'button', class: 'button', onclick: onRetry }, retryLabel),
       h('a', { class: 'button ghost', href: '#/' }, 'クイズ一覧へ')
     )
   );
