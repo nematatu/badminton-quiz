@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "node scripts/dev.js",
     "sync:shared": "node scripts/sync-shared.js",
-    "check": "node scripts/sync-shared.js --check && node scripts/check-syntax.js",
+    "check": "node scripts/sync-shared.js --check && node scripts/check-syntax.js && eslint .",
+    "lint": "eslint .",
     "test": "node --test --test-concurrency=1 \"tests/*.test.js\"",
     "verify": "npm run check && npm test && npm run build:api && npm run build:admin && npm run build:web",
     "e2e": "node scripts/e2e.js",
@@ -26,7 +27,10 @@
     "deploy:web": "wrangler pages deploy --cwd apps/web"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "axe-core": "^4.14.0",
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0",
     "miniflare": "^5.20261104.0-beta",
     "wrangler": "^4.158.0"
   }
