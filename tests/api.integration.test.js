@@ -41,7 +41,7 @@ before(async () => {
           .map(path => ({ type: 'ESModule', path: new URL(path, root).pathname })),
         compatibilityDate: '2026-07-29',
         d1Databases: ['DB'],
-        bindings: { ENVIRONMENT: 'test', ALLOWED_ORIGINS: WEB_ORIGIN, ACCESS_TEAM_DOMAIN: ISSUER, ACCESS_AUD: AUDIENCE },
+        bindings: { ENVIRONMENT: 'test', ALLOWED_ORIGINS: WEB_ORIGIN, ACCESS_TEAM_DOMAIN: ISSUER, ACCESS_AUD: AUDIENCE, ATTEMPT_TOKEN_SECRET: 'test-attempt-secret-0123456789abcdef' },
         outboundService: async request => {
           if (request.url !== `${ISSUER}/cdn-cgi/access/certs`) return new Response('blocked', { status: 599 });
           jwksRequests += 1;
@@ -76,6 +76,18 @@ async function admin(path, { method = 'GET', body, token = signer.sign() } = {})
   const response = await worker.fetch(`https://admin.internal/admin/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   return { status: response.status, body: response.status === 204 ? null : await response.json() };
 }
+/** 挑戦を開始して受付トークンを得てから回答を送る（画面と同じ流れ）。 */
+async function startSession(slug) {
+  const response = await postJson(`/v1/quizzes/${slug}/sessions`, {});
+  assert.equal(response.status, 201);
+  const started = await response.json();
+  // 受付トークンと一緒に、同じ版の問題（正解なし）が返る
+  assert.ok(started.quiz.questions.length > 0);
+  assert.doesNotMatch(JSON.stringify(started.quiz), /correct|explanation/i);
+  return started.token;
+}
+const submit = async (slug, body) => postJson(`/v1/quizzes/${slug}/attempts`, { token: await startSession(slug), ...body });
+
 const postJson = (path, body, headers = {}) =>
   publicFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
@@ -132,7 +144,7 @@ describe('公開API', () => {
 
   test('サーバー採点: 正解・解説・選んだ回答を返し、attempt を記録する', async () => {
     const before = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
-    const response = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { answers: [...SEED_ANSWERS.slice(0, 5), 0] });
+    const response = await submit(SEED_SLUG, { answers: [...SEED_ANSWERS.slice(0, 5), 0] });
     assert.equal(response.status, 201);
     const result = await response.json();
     assert.equal(result.score, 5);
@@ -143,11 +155,37 @@ describe('公開API', () => {
   });
 
   test('時間切れ送信だけ未回答を許す', async () => {
-    const timedOut = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { answers: [1, -1, -1, -1, -1, -1], timedOut: true });
+    const timedOut = await submit(SEED_SLUG, { answers: [1, -1, -1, -1, -1, -1], timedOut: true });
     assert.equal((await timedOut.json()).score, 1);
-    const cheating = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { answers: [1, -1, -1, -1, -1, -1] });
+    const cheating = await submit(SEED_SLUG, { answers: [1, -1, -1, -1, -1, -1] });
     assert.equal(cheating.status, 400);
     await cheating.arrayBuffer();
+  });
+
+  test('受付トークン: 無い・改ざん・使い回し・問題の更新を拒否する', async () => {
+    const missing = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { answers: SEED_ANSWERS });
+    assert.deepEqual([missing.status, (await missing.json()).error], [400, 'invalid_session']);
+
+    const token = await startSession(SEED_SLUG);
+    const tampered = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { token: `${token.slice(0, -2)}AA`, answers: SEED_ANSWERS });
+    assert.deepEqual([tampered.status, (await tampered.json()).error], [400, 'invalid_session']);
+
+    const first = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { token, answers: SEED_ANSWERS });
+    assert.equal((await first.json()).score, 6);
+    const replay = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { token, answers: SEED_ANSWERS });
+    assert.deepEqual([replay.status, (await replay.json()).error], [409, 'attempt_already_submitted']);
+
+    const { body: quiz } = await admin('quizzes', { method: 'POST', body: sampleQuiz('回答中に更新') });
+    await admin(`quizzes/${quiz.id}/status`, { method: 'POST', body: { status: 'published', version: 1 } });
+    const slug = encodeURIComponent(quiz.slug);
+    const before = await startSession(slug);
+    // 別のクイズの受付トークンは使えない
+    const otherQuiz = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { token: before, answers: SEED_ANSWERS });
+    assert.deepEqual([otherQuiz.status, (await otherQuiz.json()).error], [400, 'invalid_session']);
+    // 回答中に問題が編集されたら、新しい問題で採点せず 409
+    await admin(`quizzes/${quiz.id}`, { method: 'PUT', body: { ...sampleQuiz('回答中に更新'), version: 2 } });
+    const stale = await postJson(`/v1/quizzes/${slug}/attempts`, { token: before, answers: [1, 0] });
+    assert.deepEqual([stale.status, (await stale.json()).error], [409, 'quiz_updated']);
   });
 
   test('回答送信の入力検証: 415 / 413 / 400', async () => {
@@ -155,7 +193,7 @@ describe('公開API', () => {
     assert.equal(wrongType.status, 415);
     const tooLarge = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { answers: Array(5000).fill(0) });
     assert.equal(tooLarge.status, 413);
-    const wrongCount = await postJson(`/v1/quizzes/${SEED_SLUG}/attempts`, { answers: [0] });
+    const wrongCount = await submit(SEED_SLUG, { answers: [0] });
     assert.equal(wrongCount.status, 400);
     await Promise.all([wrongType, tooLarge, wrongCount].map(response => response.arrayBuffer()));
   });
@@ -295,7 +333,7 @@ describe('管理API（AdminApi エントリポイント）', () => {
     const slug = encodeURIComponent(quiz.slug);
     // 正解は [1, 0]
     for (const body of [{ answers: [1, 0] }, { answers: [1, 2] }, { answers: [3, 0] }, { answers: [1, -1], timedOut: true }]) {
-      const response = await postJson(`/v1/quizzes/${slug}/attempts`, body);
+      const response = await submit(slug, body);
       assert.equal(response.status, 201);
       await response.arrayBuffer();
     }

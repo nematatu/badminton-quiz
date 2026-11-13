@@ -240,11 +240,20 @@ export async function deleteQuiz(db, { id, actor }) {
   return exists ? 'published' : 'not_found';
 }
 
-export function recordAttempt(db, { quizId, contentVersion, score, total, answers }) {
-  return db
-    .prepare('INSERT INTO attempts (id, quiz_id, content_version, score, total, answers_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
-    .bind(crypto.randomUUID(), quizId, contentVersion, score, total, JSON.stringify(answers), now())
+/**
+ * 回答を記録する。同じ受付トークン（session_id）が既に記録済みなら何もせず false を返す。
+ * @returns {Promise<boolean>}
+ */
+export async function recordAttempt(db, { quizId, sessionId, contentVersion, score, total, answers }) {
+  const result = await db
+    .prepare(
+      `INSERT INTO attempts (id, quiz_id, session_id, content_version, score, total, answers_json, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+       ON CONFLICT (session_id) WHERE session_id IS NOT NULL DO NOTHING`
+    )
+    .bind(crypto.randomUUID(), quizId, sessionId, contentVersion, score, total, JSON.stringify(answers), now())
     .run();
+  return result.meta.changes > 0;
 }
 
 /* ───────────── 統計・履歴・保守 ───────────── */

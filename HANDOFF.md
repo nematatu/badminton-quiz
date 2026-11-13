@@ -32,7 +32,8 @@
 4. 実値を設定し、`npm run preflight` が `OK` になるまで直す。
    - `workers/api/wrangler.toml`: `routes`、`ALLOWED_ORIGINS`、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、`database_id`、Rate Limiting の `namespace_id`（アカウント内で一意な正整数）
    - `apps/web/public/config.js` の `PRODUCTION_API_ORIGIN` と `apps/web/public/_headers` の `connect-src`
-5. `npm run db:migrate:remote`
+5. `npm run db:migrate:remote` と、回答の受付トークンの署名鍵の設定（未設定だと回答を開始できない）:
+   `openssl rand -base64 48 | npx wrangler secret put ATTEMPT_TOKEN_SECRET --config workers/api/wrangler.toml`
 6. `npm run deploy:api` → `npm run deploy:admin` → `npm run deploy:web`（この順。Admin と Web の Service Binding 先の API が先に必要）
 7. Admin Pages の custom domain を Access Application で保護し、その AUD が `ACCESS_AUD` と一致していることを確認する。
 8. 本番 E2E（下記チェックリスト）。
@@ -43,6 +44,7 @@
 - [ ] `https://api…/admin/quizzes` は 404（管理APIが公開ドメインに無い）
 - [ ] 管理画面でクイズ作成 → 下書きは公開一覧に出ない → 公開すると出る
 - [ ] 公開問題の GET に `correctIndex` / `explanation` が無い
+- [ ] 同じ挑戦の回答を 2 回送ると 2 回目は 409、制限時間 + 15 秒を過ぎた送信は 409
 - [ ] 全問回答後の得点・解説が正しい。X 投稿文にタイトル・得点・`#Qraft #4択クイズ`・URL がある
 - [ ] 2 タブで同時編集すると後から保存した側が 409 になり、内容は上書きされない
 - [ ] 非公開にすると公開 GET が（ブラウザキャッシュの 30 秒以内を除き）404 になる

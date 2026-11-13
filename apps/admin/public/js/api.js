@@ -22,7 +22,8 @@ async function request(path, { method = 'GET', body } = {}) {
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
       credentials: 'same-origin',
-      redirect: 'manual'
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000)
     });
   } catch {
     throw new ApiError('network_error', 0);

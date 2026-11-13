@@ -1,6 +1,6 @@
 import { errorMessage } from '../shared/contracts.js';
 import { copyText, createToast, installSkipLink, mount } from '../shared/dom.js';
-import { fetchQuiz, fetchQuizzes, submitAttempt } from './api.js';
+import { fetchQuiz, fetchQuizzes, startSession, submitAttempt } from './api.js';
 import { QuizSession, formatDuration } from './session.js';
 import { errorView, homeView, introView, loadingView, questionView, resultView } from './views.js';
 
@@ -29,15 +29,19 @@ function announce(message) {
   announcer.textContent = message;
 }
 
-function showError(error, retry) {
+/** 同じ挑戦では再送信しても通らない採点エラー。最初からやり直してもらう。 */
+const RESTART_REQUIRED = new Set(['quiz_updated', 'attempt_expired', 'attempt_already_submitted', 'invalid_session', 'invalid_answers']);
+
+function showError(error, retry, { title = '読み込めませんでした', retryLabel } = {}) {
   const notFound = error.code === 'not_found';
   setTitle(notFound ? 'クイズが見つかりません' : 'エラー');
   mount(
     root,
     errorView({
-      title: notFound ? 'クイズが見つかりません' : '読み込めませんでした',
+      title: notFound ? 'クイズが見つかりません' : title,
       message: errorMessage(error.code),
-      onRetry: notFound ? null : retry
+      onRetry: notFound ? null : retry,
+      retryLabel
     })
   );
 }
@@ -65,8 +69,16 @@ async function showQuiz(slug) {
   }
 }
 
-function start(quiz) {
-  session = new QuizSession(quiz);
+async function start(quiz) {
+  stopTimer();
+  session = null;
+  mount(root, loadingView('準備しています…'));
+  try {
+    const started = await startSession(quiz.slug);
+    session = new QuizSession(started.quiz, started.token);
+  } catch (error) {
+    return showError(error, () => start(quiz), { title: '開始できませんでした' });
+  }
   lastAnnounced = null;
   renderQuestion();
   startTimer();
@@ -113,8 +125,13 @@ async function finish(timedOut) {
     );
   } catch (error) {
     if (session !== current) return;
+    if (RESTART_REQUIRED.has(error.code)) {
+      current.status = 'finished';
+      return showError(error, () => showQuiz(current.quiz.slug), { title: '採点できませんでした', retryLabel: '最初から挑戦する' });
+    }
+    // 通信エラー等は同じ回答でそのまま再送できる（受付トークンは採点が成功するまで有効）。
     current.status = 'playing';
-    showError(error, () => finish(timedOut));
+    showError(error, () => finish(timedOut), { title: '採点できませんでした', retryLabel: 'もう一度送信する' });
   }
 }
 

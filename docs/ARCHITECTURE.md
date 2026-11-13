@@ -48,7 +48,15 @@ Internet
 | GET | `/health` | ヘルスチェック | no-cache |
 | GET | `/v1/quizzes` | 公開クイズ一覧（問題数・制限時間を含む） | 30 秒 + ETag |
 | GET | `/v1/quizzes/:slug` | 問題（正解・解説なし） | 30 秒 + ETag |
-| POST | `/v1/quizzes/:slug/attempts` | 全問一括の回答を採点 | no-store |
+| POST | `/v1/quizzes/:slug/sessions` | 挑戦の開始。受付トークンと、同じ版の問題（正解なし）を返す | no-store |
+| POST | `/v1/quizzes/:slug/attempts` | `{ token, answers, timedOut }` を採点（トークン 1 つにつき 1 回） | no-store |
+
+**受付トークン**（`workers/api/src/attempt-session.js`）: HMAC-SHA256 で署名した
+`{ sid, slug, 問題内容の版, 発行時刻, 期限 }`。期限は「制限時間 + 15 秒」（時間制限なしは 24 時間）。
+採点時に検証し、問題が更新されていれば 409 `quiz_updated`、期限切れは 409 `attempt_expired`、
+`sid` は `attempts.session_id`（一意）に保存して再送信を 409 `attempt_already_submitted` で拒否する。
+これにより、時間制限をサーバーでも守り、1 回の挑戦で何度も採点して正解を探ることを防ぐ
+（挑戦の開始もレート制限の対象）。
 
 公開画面の共有URL `https://quiz…/q/<slug>` は Pages Function が返す。中身は通常の画面と同じで、
 `<title>` と OGP タグだけをクイズの内容に差し替える（X などのクローラーは JavaScript を実行しないため）。

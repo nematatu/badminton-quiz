@@ -13,6 +13,8 @@ ALLOWED_ORIGINS = "https://quiz.example.com"
 # Cloudflare Access の team domain と、Admin 用 Access Application の AUD。
 ACCESS_TEAM_DOMAIN = "https://REPLACE-team.cloudflareaccess.com"
 ACCESS_AUD = "REPLACE-with-access-application-aud"
+# 回答の受付トークンの署名鍵は secret で設定する（32 文字以上のランダム値）:
+#   npx wrangler secret put ATTEMPT_TOKEN_SECRET --config workers/api/wrangler.toml
 # 回答記録（attempts）の保持日数。毎日の Cron で期限切れを削除する。
 ATTEMPT_RETENTION_DAYS = "365"
 
