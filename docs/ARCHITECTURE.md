@@ -68,7 +68,7 @@ Pages の `_headers` は Function のレスポンスに適用されないので�
 
 | Method | Path | 内容 |
 |---|---|---|
-| GET | `/admin/quizzes` | 一覧（version・問題数を含む、最大 200 件） |
+| GET | `/admin/quizzes?q=&status=&cursor=` | 一覧を更新の新しい順に 50 件ずつ。タイトル / slug の部分一致と状態で絞り込み（`{ quizzes, total, counts, nextCursor }`） |
 | POST | `/admin/quizzes` | 作成（下書き） |
 | GET | `/admin/quizzes/:id` | 正解・解説を含む取得 |
 | PUT | `/admin/quizzes/:id` | 更新（`version` 必須） |

@@ -1,6 +1,7 @@
 import { authenticateAdmin } from './auth.js';
 import { HttpError, json, noContent, readJson } from './http.js';
-import { LIMITS } from '../../../packages/shared/src/contracts.js';
+import { LIMITS, QUIZ_STATUS } from '../../../packages/shared/src/contracts.js';
+import { decodeCursor, encodeCursor, isTimestamp } from './cursor.js';
 import { changeQuizStatus, createQuiz, deleteQuiz, findQuizById, getQuizStats, listAllQuizzes, listQuizHistory, updateQuiz } from './repository.js';
 import { createRouter } from './router.js';
 import { validateQuizInput, validateStatusChange, validateVersion } from './validation.js';
@@ -28,8 +29,26 @@ export function slugFor(title, id) {
   return base ? `${base}-${suffix}` : `quiz-${suffix}`;
 }
 
-async function list(_request, { env }) {
-  return json({ quizzes: await listAllQuizzes(env.DB) });
+const SEARCH_MAX_LENGTH = 80;
+const isQuizId = value => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value);
+
+/** GET /admin/quizzes?q=&status=&cursor= */
+async function list(request, { env }) {
+  const params = new URL(request.url).searchParams;
+  const status = params.get('status') || null;
+  if (status !== null && !Object.values(QUIZ_STATUS).includes(status)) throw new HttpError(400, 'invalid_status');
+  const keyword = (params.get('q') ?? '').trim();
+  if (Array.from(keyword).length > SEARCH_MAX_LENGTH) throw new HttpError(400, 'invalid_search');
+  const cursor = params.get('cursor');
+  const after = cursor ? decodeCursor(cursor, ([time, id]) => isTimestamp(time) && isQuizId(id)) : null;
+
+  const page = await listAllQuizzes(env.DB, { status, keyword, after: after && { updatedAt: after[0], id: after[1] } });
+  return json({
+    quizzes: page.quizzes,
+    total: page.total,
+    counts: page.counts,
+    nextCursor: page.next ? encodeCursor([page.next.updatedAt, page.next.id]) : null
+  });
 }
 
 async function create(request, { env, identity }) {

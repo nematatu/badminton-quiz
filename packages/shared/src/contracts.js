@@ -52,6 +52,7 @@ export const ERROR_MESSAGES = Object.freeze({
   attempt_already_submitted: 'この挑戦はすでに採点済みです。もう一度挑戦する場合は最初から始めてください。',
   invalid_json: 'リクエストの形式が正しくありません。',
   invalid_cursor: '一覧の続きを読み込めませんでした。ページを再読み込みしてください。',
+  invalid_search: '検索語が長すぎます。',
   json_required: 'リクエストの形式が正しくありません。',
   payload_too_large: 'データが大きすぎます。',
   invalid_title: `タイトルは1〜${LIMITS.title}文字で入力してください。`,
