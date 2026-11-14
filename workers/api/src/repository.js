@@ -289,20 +289,45 @@ export async function deleteQuiz(db, { id, actor }) {
   return exists ? 'published' : 'not_found';
 }
 
+/** みんなの正答率を出す最少の回答数。少ない回答では数字がぶれ、個々の回答も推測できてしまうため。 */
+export const MIN_RESPONSES_FOR_RATE = 5;
+
 /**
- * 回答を記録する。同じ受付トークン（session_id）が既に記録済みなら何もせず false を返す。
- * @returns {Promise<boolean>}
+ * 回答を記録し、設問ごとの集計（question_stats）に加算して、加算後の正答率を返す。
+ * 3 つの文を 1 回の batch（= 1 トランザクション・往復 1 回）で実行する。
+ * 同じ受付トークン（session_id）が既に記録済みなら、記録も加算もせず recorded: false を返す
+ * （加算は「今回の id の回答が存在するとき」だけ行うので二重に数えない）。
+ *
+ * @param {*} db D1 データベース
+ * @param {{ quizId: string, sessionId: string, contentVersion: number, score: number, total: number, answers: number[], correct: boolean[] }} attempt
+ * @returns {Promise<{ recorded: boolean, correctRates: Array<number | null> }>} correctRates は設問順。回答が少ない設問は null
  */
-export async function recordAttempt(db, { quizId, sessionId, contentVersion, score, total, answers }) {
-  const result = await db
-    .prepare(
-      `INSERT INTO attempts (id, quiz_id, session_id, content_version, score, total, answers_json, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-       ON CONFLICT (session_id) WHERE session_id IS NOT NULL DO NOTHING`
-    )
-    .bind(crypto.randomUUID(), quizId, sessionId, contentVersion, score, total, JSON.stringify(answers), now())
-    .run();
-  return result.meta.changes > 0;
+export async function recordAttempt(db, { quizId, sessionId, contentVersion, score, total, answers, correct }) {
+  const id = crypto.randomUUID();
+  const [inserted, , stats] = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO attempts (id, quiz_id, session_id, content_version, score, total, answers_json, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT (session_id) WHERE session_id IS NOT NULL DO NOTHING`
+      )
+      .bind(id, quizId, sessionId, contentVersion, score, total, JSON.stringify(answers), now()),
+    db
+      .prepare(
+        `INSERT INTO question_stats (quiz_id, content_version, position, responses, correct)
+         SELECT ?1, ?2, CAST(item.key AS INTEGER), 1, item.value FROM json_each(?3) AS item
+          WHERE EXISTS (SELECT 1 FROM attempts WHERE id = ?4)
+         ON CONFLICT (quiz_id, content_version, position)
+         DO UPDATE SET responses = responses + 1, correct = correct + excluded.correct`
+      )
+      .bind(quizId, contentVersion, JSON.stringify(correct.map(Number)), id),
+    db.prepare('SELECT position, responses, correct FROM question_stats WHERE quiz_id = ?1 AND content_version = ?2').bind(quizId, contentVersion)
+  ]);
+  const correctRates = Array(total).fill(null);
+  for (const row of stats.results) {
+    if (row.position < total && row.responses >= MIN_RESPONSES_FOR_RATE) correctRates[row.position] = row.correct / row.responses;
+  }
+  return { recorded: inserted.meta.changes > 0, correctRates };
 }
 
 /* ───────────── 統計・履歴・保守 ───────────── */
@@ -379,6 +404,14 @@ export async function listQuizHistory(db, quizId) {
 /** 保持期間を過ぎた回答記録を削除し、削除件数を返す。 */
 export async function deleteAttemptsBefore(db, cutoff) {
   const result = await db.prepare('DELETE FROM attempts WHERE created_at < ?1').bind(cutoff.toISOString()).run();
+  return result.meta.changes;
+}
+
+/** 問題内容が更新されて使われなくなった版の設問別集計を削除する。 */
+export async function deleteOutdatedQuestionStats(db) {
+  const result = await db
+    .prepare('DELETE FROM question_stats WHERE content_version < (SELECT content_version FROM quizzes WHERE quizzes.id = question_stats.quiz_id)')
+    .run();
   return result.meta.changes;
 }
 

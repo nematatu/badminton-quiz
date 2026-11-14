@@ -334,7 +334,8 @@ export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry
             { class: 'review-answers' },
             h('dt', null, 'あなたの回答'),
             h('dd', null, detail.selectedIndex >= 0 ? optionLabel(question, detail.selectedIndex) : '未回答（時間切れ）'),
-            !detail.correct && [h('dt', null, '正解'), h('dd', null, optionLabel(question, detail.correctIndex))]
+            !detail.correct && [h('dt', null, '正解'), h('dd', null, optionLabel(question, detail.correctIndex))],
+            typeof detail.correctRate === 'number' && [h('dt', null, 'みんなの正答率'), h('dd', null, `${Math.round(detail.correctRate * 100)}%`)]
           ),
           detail.explanation && h('p', { class: 'explanation' }, detail.explanation)
         );
