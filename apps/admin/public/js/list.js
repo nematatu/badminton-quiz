@@ -135,6 +135,7 @@ export function listView(firstPage, { load, onToggleStatus, onDuplicate }) {
                   h('th', { scope: 'col' }, 'タイトル'),
                   h('th', { scope: 'col' }, '状態'),
                   h('th', { scope: 'col', class: 'num' }, '問題数'),
+                  h('th', { scope: 'col', class: 'num', title: '現在の問題内容への挑戦回数' }, '挑戦'),
                   h('th', { scope: 'col' }, '最終更新'),
                   h('th', { scope: 'col' }, h('span', { class: 'visually-hidden' }, '操作'))
                 )
@@ -169,7 +170,9 @@ function row(quiz, { onToggleStatus, onDuplicate }) {
     ),
     h('td', null, h('span', { class: `status status-${quiz.status}` }, STATUS_LABELS[quiz.status])),
     h('td', { class: 'num' }, quiz.questionCount),
-    h('td', null, h('time', { datetime: quiz.updatedAt }, dateFormat.format(new Date(quiz.updatedAt)))),
+    // 管理画面と API は別々にデプロイされるので、古い API が attemptCount を返さなくても一覧は表示する
+    h('td', { class: 'num' }, typeof quiz.attemptCount === 'number' ? quiz.attemptCount.toLocaleString('ja-JP') : '—'),
+    h('td', { class: 'updated-cell' }, h('time', { datetime: quiz.updatedAt }, dateFormat.format(new Date(quiz.updatedAt)))),
     h(
       'td',
       { class: 'actions-cell' },

@@ -71,7 +71,11 @@ export async function listAllQuizzes(db, { status = null, keyword = '', after = 
     db
       .prepare(
         `SELECT id, slug, title, status, version, updated_at, published_at,
-                (SELECT COUNT(*) FROM questions WHERE quiz_id = quizzes.id) AS question_count
+                (SELECT COUNT(*) FROM questions WHERE quiz_id = quizzes.id) AS question_count,
+                -- 現在の問題内容への挑戦回数。分析画面の「挑戦回数」と同じく attempts を数える
+                -- （保持期間を過ぎて削除された回答は数えない）。idx_attempts_quiz_content で索引だけを読む
+                (SELECT COUNT(*) FROM attempts
+                  WHERE quiz_id = quizzes.id AND content_version = quizzes.content_version) AS attempt_count
            FROM quizzes
           WHERE ${filter}
             AND (?3 IS NULL OR updated_at < ?3 OR (updated_at = ?3 AND id < ?4))
@@ -97,6 +101,7 @@ export async function listAllQuizzes(db, { status = null, keyword = '', after = 
       status: row.status,
       version: row.version,
       questionCount: row.question_count,
+      attemptCount: row.attempt_count ?? 0,
       updatedAt: row.updated_at,
       publishedAt: row.published_at
     })),

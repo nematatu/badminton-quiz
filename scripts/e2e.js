@@ -360,6 +360,8 @@ for (const [name, options] of [
 {
   const page = await open(ADMIN, { viewport: { width: 1280, height: 900 } });
   const row = page.getByRole('row', { name: new RegExp(title) });
+  // 一覧の「挑戦」列にも、分析と同じ挑戦回数が出る
+  assert.equal(await row.locator('td.num').nth(1).innerText(), '4');
   await row.getByRole('link', { name: '分析' }).click();
   await page.getByRole('heading', { name: '得点の分布' }).waitFor();
   const kpis = await page.locator('.stats').innerText();
