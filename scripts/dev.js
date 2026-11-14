@@ -71,6 +71,7 @@ start(
     '--show-interactive-dev-session=false',
     '--var', 'ENVIRONMENT:development',
     '--var', `ALLOWED_ORIGINS:http://localhost:${ports.web}`,
+    '--var', `PUBLIC_SITE_ORIGIN:http://localhost:${ports.web}`,
     '--var', `ACCESS_TEAM_DOMAIN:${ISSUER}`,
     '--var', `ACCESS_AUD:${AUDIENCE}`,
     '--var', `ATTEMPT_TOKEN_SECRET:${randomUUID()}${randomUUID()}`
