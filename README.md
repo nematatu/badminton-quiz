@@ -61,7 +61,7 @@ E2E は初回だけ `npx playwright install chromium` でブラウザを入れ�
 
 1. 実値を設定する（`npm run preflight` が未設定箇所を一覧表示する）
    - `workers/api/wrangler.toml`: API のドメイン、`ALLOWED_ORIGINS`、`PUBLIC_SITE_ORIGIN`（管理画面に出す公開ページの URL）、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、D1 の `database_id`
-   - `apps/web/public/config.js` と `apps/web/public/_headers`（CSP `connect-src`）: API の Origin
+   - `apps/web/public/config.js`・`apps/web/public/_headers`（CSP `connect-src`）・`apps/web/public/index.html`（`preconnect`）: API の Origin
    - 回答の受付トークンの署名鍵（secret）: `npx wrangler secret put ATTEMPT_TOKEN_SECRET --config workers/api/wrangler.toml`（32 文字以上のランダム値。例: `openssl rand -base64 48`）
 2. remote D1 へ migration を適用し、API → 管理画面 → 公開画面の順にデプロイする
 
