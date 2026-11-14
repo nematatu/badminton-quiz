@@ -10,7 +10,7 @@ const read = path => readFileSync(new URL(path, root), 'utf8');
 const problems = [];
 
 const PLACEHOLDER = /example\.com|REPLACE/;
-for (const path of ['workers/api/wrangler.toml', 'apps/admin/wrangler.toml', 'apps/web/wrangler.toml', 'apps/web/public/config.js', 'apps/web/public/_headers', 'apps/web/functions/_lib/security-headers.js']) {
+for (const path of ['workers/api/wrangler.toml', 'apps/admin/wrangler.toml', 'apps/web/wrangler.toml', 'apps/web/public/config.js', 'apps/web/public/_headers', 'apps/web/public/index.html', 'apps/web/functions/_lib/security-headers.js']) {
   read(path)
     .split('\n')
     .forEach((line, index) => {
@@ -22,6 +22,8 @@ const apiOrigin = /PRODUCTION_API_ORIGIN\s*=\s*'([^']+)'/.exec(read('apps/web/pu
 const csp = /Content-Security-Policy:.*?connect-src ([^;]+)/.exec(read('apps/web/public/_headers'))?.[1] ?? '';
 if (!apiOrigin?.startsWith('https://')) problems.push('apps/web/public/config.js の API Origin は https:// で始めてください');
 else if (!csp.split(/\s+/).includes(apiOrigin)) problems.push(`apps/web/public/_headers の connect-src に ${apiOrigin} がありません`);
+const preconnect = /<link rel="preconnect" href="([^"]+)"/.exec(read('apps/web/public/index.html'))?.[1];
+if (apiOrigin && preconnect !== apiOrigin) problems.push(`apps/web/public/index.html の preconnect（${preconnect ?? 'なし'}）を API Origin（${apiOrigin}）に合わせてください`);
 
 const workerConfig = read('workers/api/wrangler.toml');
 const allowedOrigins = /ALLOWED_ORIGINS\s*=\s*"([^"]*)"/.exec(workerConfig)?.[1] ?? '';
