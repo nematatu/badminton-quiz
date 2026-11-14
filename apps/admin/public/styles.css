@@ -289,6 +289,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 }
 @media (max-width: 520px) {
   .page-header .button { display: none; }
+  /* 下部の操作バー: ボタンが横に並びきらないので、保存（主操作）を上段に全幅で置き、ほかは下段に折り返す */
+  .action-bar { flex-direction: column-reverse; align-items: stretch; }
+  .action-bar > div { flex-wrap: wrap; }
+  .action-bar > div > .button { flex: 1 1 auto; }
   .question-head { flex-direction: column; align-items: flex-start; }
 }
 

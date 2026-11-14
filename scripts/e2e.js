@@ -254,6 +254,27 @@ for (const [name, options] of [
   await page.context().close();
 }
 
+/* ── 管理画面: スマートフォン幅（375px）で主要画面が横にはみ出さない ── */
+{
+  const page = await open(`${ADMIN}/#/new`, { viewport: { width: 375, height: 740 }, isMobile: true, hasTouch: true });
+  await page.getByLabel('タイトル').waitFor();
+  for (const [hash, ready] of [
+    ['#/new', page.getByLabel('タイトル')],
+    ['#/', page.locator('.quiz-table tbody tr').first()]
+  ]) {
+    await page.goto(`${ADMIN}/${hash}`);
+    await ready.waitFor();
+    const { scrollWidth, innerWidth } = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth }));
+    assert.ok(scrollWidth <= innerWidth, `${hash} が横にはみ出している（${scrollWidth}px > ${innerWidth}px）`);
+  }
+  await page.goto(`${ADMIN}/#/new`);
+  const saveButton = page.getByRole('button', { name: '下書きとして保存' });
+  await saveButton.waitFor();
+  const save = await saveButton.boundingBox();
+  assert.ok(save.x >= 0 && save.x + save.width <= 375, '保存ボタンが画面内にある');
+  await page.context().close();
+}
+
 /* ── 管理画面: 絞り込みを変えた直後は、前の条件の「もっと見る」を出さない（API 応答は固定） ── */
 {
   const quiz = (index, status) => ({
