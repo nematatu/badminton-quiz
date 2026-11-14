@@ -45,6 +45,22 @@ test('誤りのある行は「何行目の何が悪いか」をまとめて返�
   assert.deepEqual(questionsFromCsv(CSV_HEADER.join(',')).errors, ['問題の行がありません。']);
 });
 
+test('行番号は空行も数え、表計算ソフトの行番号と一致する', () => {
+  const csv = [CSV_HEADER.join(','), '', '問い,A,B,C,D,1,', '', ',A,B,C,D,1,'].join('\r\n');
+  assert.deepEqual(questionsFromCsv(csv).errors, ['5 行目: 問題文が空です']);
+});
+
+test('引用符が閉じていない CSV は、後ろの行を飲み込まずに誤りにする', () => {
+  const csv = 'Q1,A,B,C,D,1,"解説\nQ2,A,B,C,D,2,二問目の解説\n';
+  assert.throws(() => parseCsv(csv), /1 行目: 引用符（"）が閉じられていません/);
+  assert.deepEqual(questionsFromCsv(csv), { questions: [], errors: ['1 行目: 引用符（"）が閉じられていません'] });
+});
+
+test('列が多すぎる行は、解説の後ろを黙って捨てずに誤りにする（末尾の空の列は許す）', () => {
+  assert.deepEqual(questionsFromCsv('Q,A,B,C,D,1,前半,後半\n').errors, ['1 行目: 列は 7 列までです（カンマを含む項目は "" で囲んでください）']);
+  assert.deepEqual(questionsFromCsv('Q,A,B,C,D,1,解説,,\n').errors, []);
+});
+
 test('decodeCsvFile: UTF-8 と、Excel が保存する Shift_JIS の両方を読める', () => {
   const utf8 = new TextEncoder().encode('問題文,選択肢1');
   assert.equal(decodeCsvFile(utf8.buffer), '問題文,選択肢1');
