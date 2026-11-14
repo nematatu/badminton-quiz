@@ -372,6 +372,7 @@ export function practiceView(practice, { onSelect, onCheck, onNext, onExit }) {
     'form',
     {
       class: 'card question-card',
+      dataset: { practice: '' },
       onsubmit: event => {
         event.preventDefault();
         if (!practice.checked && practice.selected !== null) onCheck();
@@ -398,7 +399,7 @@ export function practiceView(practice, { onSelect, onCheck, onNext, onExit }) {
                 .filter(Boolean)
                 .join(' ')
             },
-            h('input', { type: 'radio', name: 'answer', value: String(optionIndex), checked: practice.selected === optionIndex }),
+            h('input', { type: 'radio', name: 'answer', value: String(optionIndex), checked: practice.selected === optionIndex, 'aria-keyshortcuts': String(optionIndex + 1) }),
             h('span', { class: 'answer-key', 'aria-hidden': 'true' }, LETTERS[optionIndex]),
             h('span', { class: 'answer-text' }, option),
             // 色だけに頼らず、どれが正解でどれを選んだかを文字でも示す
@@ -409,6 +410,7 @@ export function practiceView(practice, { onSelect, onCheck, onNext, onExit }) {
       )
     ),
     feedback,
+    !checked && h('p', { class: 'hint' }, 'キーボードの 1〜4 でも選べます'),
     h('div', { class: 'question-actions' }, h('button', { type: 'button', class: 'button ghost', onclick: onExit }, '結果に戻る'), actionButton)
   );
 

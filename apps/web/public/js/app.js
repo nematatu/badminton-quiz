@@ -269,14 +269,16 @@ function tick() {
 // 1〜4 / A〜D キーで選択、Enter で次へ。
 // 1 文字のショートカットは、フォーカスがクイズの領域にある時だけ有効にする（WCAG 2.1.4）。
 // ページ全体で効かせると、音声入力の言葉やスクリーンリーダーの 1 文字操作が回答として誤入力される。
+// 間違えた問題の復習（data-practice の付いた設問）でも同じ操作で答えられる。確かめた後は選択肢が無効になるので選べない。
 document.addEventListener('keydown', event => {
-  if (session?.status !== 'playing' || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
   const form = /** @type {HTMLFormElement | null} */ (root.querySelector('.question-card'));
   if (!form || !root.contains(document.activeElement)) return;
+  if (session?.status !== 'playing' && !('practice' in form.dataset)) return;
   const index = '1234'.indexOf(event.key) >= 0 ? '1234'.indexOf(event.key) : 'abcd'.indexOf(event.key.toLowerCase());
   if (index >= 0 && event.key.length === 1) {
     const radio = /** @type {HTMLInputElement | undefined} */ (form.querySelectorAll('input[name="answer"]')[index]);
-    if (radio) {
+    if (radio && !radio.matches(':disabled')) {
       radio.checked = true;
       radio.dispatchEvent(new Event('change', { bubbles: true }));
       radio.focus();
