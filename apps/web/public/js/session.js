@@ -64,19 +64,6 @@ export function formatDuration(totalSeconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-/** 一覧や導入画面向けの「全5問・制限時間1分30秒」のような説明。 */
-export function describeQuiz({ questionCount, timeLimitSeconds }) {
-  const parts = [`全${questionCount}問`];
-  if (timeLimitSeconds) {
-    const minutes = Math.floor(timeLimitSeconds / 60);
-    const seconds = timeLimitSeconds % 60;
-    parts.push(`制限時間${minutes ? `${minutes}分` : ''}${seconds ? `${seconds}秒` : ''}`);
-  } else {
-    parts.push('時間制限なし');
-  }
-  return parts.join('・');
-}
-
 /** 結果を共有するときの文面（X の投稿・端末の共有メニューで共通）。 */
 export function shareText(quiz, result) {
   return `「${quiz.title}」で${result.total}問中${result.score}問正解しました！\n#Qraft #4択クイズ`;

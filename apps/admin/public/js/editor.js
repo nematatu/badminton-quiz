@@ -1,5 +1,6 @@
 import { LIMITS, OPTION_COUNT, QUESTION_FIELD_MESSAGES, QUIZ_STATUS, charLength, errorMessage } from '../shared/contracts.js';
 import { h } from '../shared/dom.js';
+import { openPreview } from './preview.js';
 
 /**
  * クイズ編集フォーム。
@@ -78,7 +79,8 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
         null,
         !isNew &&
           quiz.status !== QUIZ_STATUS.PUBLISHED &&
-          h('button', { type: 'button', class: 'button danger', onclick: () => onDelete(quiz) }, '削除')
+          h('button', { type: 'button', class: 'button danger', onclick: () => onDelete(quiz) }, '削除'),
+        h('button', { type: 'button', class: 'button', onclick: () => openPreview(read()) }, 'プレビュー')
       ),
       h(
         'div',
