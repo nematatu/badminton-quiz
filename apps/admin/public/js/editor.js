@@ -185,9 +185,9 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
     const cards = [...questions.children];
     cards.forEach((card, index) => {
       card.querySelector('[data-number]').textContent = `第${index + 1}問`;
-      card.querySelector('[data-move="-1"]').disabled = index === 0;
-      card.querySelector('[data-move="1"]').disabled = index === cards.length - 1;
-      card.querySelector('[data-remove]').disabled = cards.length === 1;
+      /** @type {HTMLButtonElement} */ (card.querySelector('[data-move="-1"]')).disabled = index === 0;
+      /** @type {HTMLButtonElement} */ (card.querySelector('[data-move="1"]')).disabled = index === cards.length - 1;
+      /** @type {HTMLButtonElement} */ (card.querySelector('[data-remove]')).disabled = cards.length === 1;
     });
     addButton.disabled = cards.length >= LIMITS.questions;
     form.querySelector('[data-question-count]').textContent = `${cards.length} / ${LIMITS.questions}問`;
@@ -204,11 +204,14 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
     }));
   }
 
+  /** 名前でフォームの入力欄を取り出す（title / description / timeLimitSeconds）。 */
+  const control = name => /** @type {HTMLInputElement | HTMLTextAreaElement | null} */ (form.elements.namedItem(name));
+
   function read() {
-    const timeLimit = form.elements.timeLimitSeconds.value.trim();
+    const timeLimit = control('timeLimitSeconds').value.trim();
     return {
-      title: form.elements.title.value,
-      description: form.elements.description.value,
+      title: control('title').value,
+      description: control('description').value,
       timeLimitSeconds: timeLimit === '' ? null : Number(timeLimit),
       questions: readQuestions([...questions.children]),
       ...(quiz ? { version: quiz.version } : {})
@@ -219,16 +222,16 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
     formError.hidden = true;
     form.querySelectorAll('[aria-invalid]').forEach(element => element.removeAttribute('aria-invalid'));
     form.querySelectorAll('[data-question-error]').forEach(element => {
-      element.hidden = true;
+      /** @type {HTMLElement} */ (element).hidden = true;
     });
-    form.querySelectorAll('[name="option"]').forEach(input => input.setCustomValidity(''));
+    form.querySelectorAll('input[name="option"]').forEach(input => /** @type {HTMLInputElement} */ (input).setCustomValidity(''));
   }
 
   function validate() {
     clearErrors();
     // 重複選択肢（全角半角・大文字小文字を区別しない）を各選択肢の入力欄で知らせる。
     for (const card of questions.children) {
-      const inputs = [...card.querySelectorAll('[name="option"]')];
+      const inputs = /** @type {HTMLInputElement[]} */ ([...card.querySelectorAll('input[name="option"]')]);
       const seen = new Map();
       for (const input of inputs) {
         const key = input.value.trim().normalize('NFKC').toLocaleLowerCase('ja');
@@ -238,7 +241,9 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
       }
     }
     // maxLength は UTF-16 単位なので、絵文字などで API の上限（コードポイント）とずれない。
-    const invalid = [...form.elements].find(element => element.willValidate && !element.checkValidity());
+    // フォーム内の入力欄・ボタン・fieldset はいずれも制約検証の API（willValidate 等）を持つ。
+    const elements = /** @type {HTMLInputElement[]} */ ([...form.elements]);
+    const invalid = elements.find(element => element.willValidate && !element.checkValidity());
     if (!invalid) return true;
     invalid.setAttribute('aria-invalid', 'true');
     invalid.reportValidity();
@@ -251,20 +256,20 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
     if (error.code === 'invalid_question' && error.detail?.question) {
       const card = questions.children[error.detail.question - 1];
       if (card) {
-        const message = card.querySelector('[data-question-error]');
+        const message = /** @type {HTMLElement} */ (card.querySelector('[data-question-error]'));
         message.textContent = QUESTION_FIELD_MESSAGES[error.detail.field] ?? errorMessage(error.code);
         message.hidden = false;
         const target = { prompt: '[name="prompt"]', explanation: '[name="explanation"]' }[error.detail.field] ?? '[name="option"]';
         card.querySelector(target)?.setAttribute('aria-invalid', 'true');
         card.scrollIntoView({ block: 'center' });
-        card.querySelector(target)?.focus({ preventScroll: true });
+        /** @type {HTMLElement | null} */ (card.querySelector(target))?.focus({ preventScroll: true });
         return true;
       }
     }
     const fieldByCode = { invalid_title: 'title', invalid_description: 'description', invalid_time_limit: 'timeLimitSeconds' };
     formError.textContent = errorMessage(error.code);
     formError.hidden = false;
-    const input = form.elements[fieldByCode[error.code]];
+    const input = fieldByCode[error.code] ? control(fieldByCode[error.code]) : null;
     if (input) {
       input.setAttribute('aria-invalid', 'true');
       input.focus();
@@ -288,7 +293,12 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
   };
 }
 
-/** ラベル・文字数カウンター・補足を持つ入力欄。 */
+/**
+ * ラベル・文字数カウンター・補足を持つ入力欄。
+ * @param {string} label
+ * @param {HTMLInputElement | HTMLTextAreaElement} control
+ * @param {{ counter?: number, hint?: string }} [options] counter は文字数の上限（カウンターを出す）
+ */
 function field(label, control, { counter, hint } = {}) {
   const id = nextId('field');
   control.id = id;

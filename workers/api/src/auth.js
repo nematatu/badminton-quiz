@@ -130,7 +130,7 @@ async function fetchJwks(issuer) {
     if (jwk?.kty !== 'RSA' || typeof jwk.kid !== 'string') continue;
     try {
       const { kid, kty, n, e } = jwk;
-      const key = await crypto.subtle.importKey('jwk', { kid, kty, n, e, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+      const key = await crypto.subtle.importKey('jwk', { kty, n, e, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
       keys.set(kid, key);
     } catch {
       // 壊れた鍵は無視し、他の鍵で検証を続ける。
@@ -146,5 +146,5 @@ function decodeBase64Url(value) {
 }
 
 function decodeBase64UrlText(value) {
-  return new TextDecoder('utf-8', { fatal: true }).decode(decodeBase64Url(value));
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(decodeBase64Url(value));
 }

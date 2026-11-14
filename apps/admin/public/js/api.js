@@ -14,6 +14,10 @@ export class ApiError extends Error {
  * Cloudflare Access のセッションが切れると、fetch はログイン画面への
  * リダイレクトを受け取る。追従せず「要再ログイン」として扱う。
  */
+/**
+ * @param {string} path
+ * @param {{ method?: string, body?: unknown }} [options]
+ */
 async function request(path, { method = 'GET', body } = {}) {
   let response;
   try {

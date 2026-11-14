@@ -1,0 +1,16 @@
+{
+  // 公開画面・管理画面（ブラウザで動くコード）の型チェック（出力はしない）。
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "skipLibCheck": true
+  },
+  "include": ["apps/*/public/js/**/*.js", "packages/shared/src/dom.js", "packages/shared/src/contracts.js"]
+}

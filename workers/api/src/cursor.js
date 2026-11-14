@@ -25,7 +25,7 @@ export function decodeCursor(cursor, isValid) {
   try {
     if (cursor.length > MAX_CURSOR_LENGTH || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw new Error('format');
     const base64 = cursor.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(cursor.length / 4) * 4, '=');
-    const values = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(atob(base64), char => char.charCodeAt(0))));
+    const values = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(Uint8Array.from(atob(base64), char => char.charCodeAt(0))));
     if (!Array.isArray(values) || !isValid(values)) throw new Error('value');
     return values;
   } catch {

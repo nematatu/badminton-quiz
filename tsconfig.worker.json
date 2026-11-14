@@ -1,0 +1,17 @@
+{
+  // Cloudflare Workers / Pages Functions の型チェック（出力はしない）。
+  // Workers の型定義は DOM と同名の型（Element 等）を持つため、ブラウザ用とは設定を分ける。
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types"],
+    "skipLibCheck": true
+  },
+  "include": ["workers/api/src/**/*.js", "apps/*/functions/**/*.js", "packages/shared/src/contracts.js"]
+}
