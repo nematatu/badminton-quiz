@@ -486,7 +486,11 @@ describe('管理API（AdminApi エントリポイント）', () => {
     await admin(`quizzes/${quiz.id}`, { method: 'PUT', body: { ...sampleQuiz('みんなの正答率'), version: current.body.version } });
     assert.deepEqual(await rates({ answers: [1, 0] }), [null, null]);
     assert.equal((await listed()).attemptCount, 1, '編集後は新しい内容への挑戦だけを数える');
+    // 保持期間を過ぎて削除された回答は、分析画面と同じく一覧の挑戦回数にも含めない
+    await db.prepare("UPDATE attempts SET created_at = '2000-01-01T00:00:00.000Z' WHERE quiz_id = ?1").bind(quiz.id).run();
     await purgeExpiredAttempts({ DB: db });
+    assert.equal((await listed()).attemptCount, 0);
+    assert.equal((await admin(`quizzes/${quiz.id}/stats`)).body.attempts, 0);
     const left = await db.prepare('SELECT content_version, responses FROM question_stats WHERE quiz_id = ?1 ORDER BY position').bind(quiz.id).all();
     const { content_version: latest } = await db.prepare('SELECT content_version FROM quizzes WHERE id = ?1').bind(quiz.id).first();
     assert.deepEqual(left.results, [
