@@ -240,6 +240,17 @@ main { width: 100%; padding: 0 20px; }
 .review-answers { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 0; font-size: 14px; }
 .review-answers dt { color: var(--muted); }
 .review-answers dd { margin: 0; overflow-wrap: anywhere; }
+/* 間違えた問題の復習 */
+.practice-cta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 12px; margin: 20px 0 0; padding-top: 20px; border-top: 1px solid var(--line); }
+.practice-note { color: var(--muted); font-size: 13px; }
+.question-card fieldset:disabled .answer { cursor: default; }
+.answer:has(.answer-mark) { grid-template-columns: 32px 1fr auto; }
+.answer-mark { font-size: 12px; font-weight: 800; }
+.answer.is-answer { border-color: var(--success); box-shadow: inset 0 0 0 1px var(--success); }
+.answer.is-answer .answer-mark { color: var(--success); }
+.answer.is-mistake { border-color: var(--danger); background: var(--danger-surface); box-shadow: inset 0 0 0 1px var(--danger); }
+.answer.is-mistake .answer-mark { color: var(--danger); }
+.practice-feedback { margin: 16px 0 0; }
 .explanation { margin: 10px 0 0; padding: 10px 14px; border-left: 3px solid var(--line); color: var(--muted); font-size: 14px; }
 
 /* ── Responsive / motion ───────────────────────────────────── */
