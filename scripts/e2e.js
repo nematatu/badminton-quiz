@@ -241,6 +241,11 @@ for (const [name, options] of [
   }
 
   await page.getByRole('link', { name: new RegExp(title) }).click();
+  // 導入画面に、これまでの挑戦回数（先に走るデスクトップの 2 回）を出す。
+  // API の応答はブラウザに 30 秒キャッシュされるので、キャッシュの無い新しいブラウザ（このモバイル）で確かめる
+  if (name === 'mobile') {
+    assert.equal(await page.locator('.play-count').innerText(), 'これまでに 2 回挑戦されています');
+  }
   if (name === 'desktop') {
     await page.getByRole('button', { name: 'はじめる' }).waitFor();
     await page.waitForTimeout(1200);

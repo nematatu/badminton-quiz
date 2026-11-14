@@ -232,6 +232,7 @@ main { width: 100%; padding: 0 20px; }
 .result-card { text-align: center; }
 .score { margin: 8px 0 0; color: var(--muted); }
 .score strong { color: var(--accent); font-size: 72px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.play-count { margin: 0 0 16px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .record { margin: 0 0 16px; padding: 10px 14px; border-radius: var(--radius-s); background: var(--surface-muted); font-size: 14px; font-variant-numeric: tabular-nums; }
 .new-best { display: inline-block; margin: 12px 0 0; padding: 4px 12px; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-weight: 800; }
 .result-card .muted { margin: 8px 0 0; font-size: 14px; }

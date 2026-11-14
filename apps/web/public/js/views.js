@@ -189,6 +189,7 @@ export function introView(quiz, { onStart, record = null }) {
       h('p', { class: 'eyebrow' }, describeQuiz({ questionCount: quiz.questions.length, timeLimitSeconds: quiz.timeLimitSeconds })),
       h('h1', null, quiz.title),
       quiz.description && h('p', { class: 'lead' }, quiz.description),
+      quiz.playCount > 0 && h('p', { class: 'play-count' }, `これまでに ${quiz.playCount.toLocaleString('ja-JP')} 回挑戦されています`),
       record &&
         h(
           'p',
@@ -197,6 +198,7 @@ export function introView(quiz, { onStart, record = null }) {
           record.plays > 1 && `（${record.plays}回挑戦）`
         ),
       quiz.timeLimitSeconds && h('p', { class: 'notice' }, '「はじめる」を押すとタイマーが動き出します。時間切れになると、その時点の回答で採点されます。'),
+      quiz.shuffleOptions && h('p', { class: 'notice' }, '選択肢の順番は挑戦するたびに入れ替わります。'),
       h('button', { type: 'button', class: 'button wide', onclick: onStart }, 'はじめる')
     )
   );
