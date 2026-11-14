@@ -218,6 +218,25 @@ for (const [name, options] of [
   }
   await shot(page, `web-${name}-result`);
 
+  // もう一度挑戦して全問正解すると自己ベスト更新を知らせ、導入画面に前回・自己ベストが出る（このブラウザの記録）
+  if (name === 'desktop') {
+    await page.getByRole('button', { name: 'もう一度挑戦' }).click();
+    await page.getByRole('heading', { name: '空の色は？' }).waitFor();
+    await page.locator('#app').focus();
+    await page.keyboard.press('1');
+    await page.getByRole('button', { name: '次の問題へ' }).click();
+    await page.getByRole('heading', { name: '1 + 1 は？' }).waitFor();
+    await page.getByText('2', { exact: true }).click();
+    await page.getByRole('button', { name: '採点する' }).click();
+    await page.getByText('自己ベスト更新！（前回までのベスト 1問）').waitFor();
+    assert.match(await page.locator('#announcer').innerText(), /自己ベスト更新/);
+    await shot(page, 'web-desktop-new-best');
+    await page.goto(shareUrl);
+    await page.getByRole('button', { name: 'はじめる' }).waitFor();
+    assert.equal(await page.locator('.record').innerText(), '前回 2 / 2問正解・自己ベスト 2 / 2問（2回挑戦）');
+  }
+
+
   // 共有URLを開くと同じクイズの導入画面になり、HTML にはクイズ名の OGP が入っている
   const sharedHtml = await (await page.request.get(shareUrl)).text();
   assert.match(sharedHtml, new RegExp(`<meta property="og:title" content="${title} \\| Qraft">`));
@@ -231,19 +250,19 @@ for (const [name, options] of [
   await page.context().close();
 }
 
-/* ── 管理画面: 分析（上の 3 回の回答が集計される）→ 複製 ── */
+/* ── 管理画面: 分析（上の 4 回の回答が集計される: 1 問正解 × 3、全問正解 × 1）→ 複製 ── */
 {
   const page = await open(ADMIN, { viewport: { width: 1280, height: 900 } });
   const row = page.getByRole('row', { name: new RegExp(title) });
   await row.getByRole('link', { name: '分析' }).click();
   await page.getByRole('heading', { name: '得点の分布' }).waitFor();
   const kpis = await page.locator('.stats').innerText();
-  assert.match(kpis, /3\s*挑戦回数/);
-  assert.match(kpis, /50%\s*平均正答率/);
-  // 1問目（空の色は？）は全員正解、2問目（1 + 1 は？）は全員 C を選んで不正解
+  assert.match(kpis, /4\s*挑戦回数/);
+  assert.match(kpis, /63%\s*平均正答率/); // (1 + 1 + 1 + 2) / 8 = 62.5%
+  // 1問目（空の色は？）は全員正解、2問目（1 + 1 は？）は 3 人が C、1 人が正解の B
   const rates = await page.locator('.meter-value').allInnerTexts();
-  assert.deepEqual(rates, ['100%', '0%']);
-  assert.match(await page.locator('.meter-row').nth(1).innerText(), /C\. 3: 3人/);
+  assert.deepEqual(rates, ['100%', '25%']);
+  assert.match(await page.locator('.meter-row').nth(1).innerText(), /B\. 2: 1人[\s\S]*C\. 3: 3人/);
   assert.match(await page.locator('.history').innerText(), /公開[\s\S]*作成/);
   await shot(page, 'admin-insights');
 

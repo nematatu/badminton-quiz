@@ -1,6 +1,7 @@
 import { errorMessage } from '../shared/contracts.js';
 import { copyText, createToast, installSkipLink, mount } from '../shared/dom.js';
 import { fetchQuiz, fetchQuizzes, startSession, submitAttempt } from './api.js';
+import { loadRecord, saveRecord } from './records.js';
 import { QuizSession, formatDuration, shareText } from './session.js';
 import { errorView, homeView, introView, loadingView, questionView, resultView } from './views.js';
 
@@ -90,7 +91,7 @@ async function showQuiz(slug) {
     const quiz = await fetchQuiz(slug);
     if (!isCurrent(current)) return;
     setTitle(quiz.title);
-    mount(root, introView(quiz, { onStart: () => start(quiz) }));
+    mount(root, introView(quiz, { onStart: () => start(quiz), record: loadRecord(quiz.slug, quiz.questions.length) }));
   } catch (error) {
     if (isCurrent(current)) showError(error, () => showQuiz(slug));
   }
@@ -146,14 +147,16 @@ async function finish(timedOut) {
     const result = await submitAttempt(current.quiz.slug, current.submission(timedOut));
     if (session !== current) return; // 採点中に別の画面へ移動した
     current.status = 'finished';
-    announce(`採点結果: ${result.total}問中${result.score}問正解`);
+    const progress = saveRecord(current.quiz.slug, result);
+    announce(`採点結果: ${result.total}問中${result.score}問正解${progress.isNewBest ? '。自己ベスト更新' : ''}`);
     mount(
       root,
       resultView(current, result, {
         shareUrl: shareUrl(current.quiz.slug),
         onShare: navigator.share ? () => shareResult(current.quiz, result) : null,
         onCopy: async () => notify((await copyText(shareUrl(current.quiz.slug))) ? 'リンクをコピーしました' : 'コピーできませんでした。アドレスバーのURLをご利用ください'),
-        onRetry: () => start(current.quiz)
+        onRetry: () => start(current.quiz),
+        progress
       })
     );
   } catch (error) {
