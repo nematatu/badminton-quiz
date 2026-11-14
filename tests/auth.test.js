@@ -88,3 +88,33 @@ test('Access の設定漏れや http の issuer は拒否側に倒す', async ()
   await assert.rejects(authenticateAdmin(request(signer.sign()), { ...env, ACCESS_AUD: '' }), { status: 500 });
   await assert.rejects(authenticateAdmin(request(signer.sign()), { ...env, ACCESS_TEAM_DOMAIN: 'http://insecure.test' }), { status: 500 });
 });
+
+test('JWKS を取得できない時は 503（認証エラーではない）で、次のリクエストで取り直す', async () => {
+  const signer = createSigner();
+  published = [signer];
+  globalThis.fetch = async () => {
+    jwksRequests += 1;
+    return new Response('upstream error', { status: 502 });
+  };
+  await assert.rejects(authenticateAdmin(request(signer.sign()), env), error => error.status === 503 && error.headers['Retry-After'] === '5');
+
+  // 失敗を記憶しない（復旧したらすぐ使える）
+  globalThis.fetch = async () => {
+    jwksRequests += 1;
+    return Response.json({ keys: [signer.jwk] });
+  };
+  assert.equal((await authenticateAdmin(request(signer.sign()), env)).sub, 'admin-1');
+  assert.equal(jwksRequests, 2);
+});
+
+test('JWKS に壊れた鍵や RSA 以外の鍵が混ざっていても、正しい鍵で検証できる', async () => {
+  const signer = createSigner('good');
+  published = [
+    { jwk: { kty: 'RSA', kid: 'broken', n: '!!!', e: 'AQAB' } },
+    { jwk: { kty: 'EC', kid: 'ec-key', crv: 'P-256', x: 'a', y: 'b' } },
+    { jwk: { kty: 'RSA' } },
+    signer
+  ];
+  assert.equal((await authenticateAdmin(request(signer.sign()), env)).sub, 'admin-1');
+  await assert.rejects(authenticateAdmin(request(createSigner('broken').sign()), env), unauthorized);
+});

@@ -3,14 +3,12 @@
  * migration と seed を適用した DB に対して、公開API・管理API を HTTP で叩く。
  */
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
-import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { purgeExpiredAttempts } from '../workers/api/src/maintenance.js';
 import { ADMIN_PAGE_SIZE, PUBLIC_PAGE_SIZE, listAllQuizzes, listPublishedQuizzes, updateQuiz } from '../workers/api/src/repository.js';
 import { AUDIENCE, ISSUER, createSigner } from './helpers/access.js';
+import { startApiWorker } from './helpers/worker.js';
 
-const root = new URL('../', import.meta.url);
 const WEB_ORIGIN = 'https://quiz.test';
 const SEED_SLUG = 'badminton-basics-sample';
 const SEED_ANSWERS = [1, 2, 0, 3, 1, 3];
@@ -20,49 +18,15 @@ let db;
 let signer = createSigner('k1');
 let jwksRequests = 0;
 
-function statements(path) {
-  return readFileSync(new URL(path, root), 'utf8')
-    .replace(/--.*$/gm, '')
-    .split(';')
-    .map(sql => sql.trim())
-    .filter(sql => sql && !/^PRAGMA/i.test(sql));
-}
-
 before(async () => {
-  // Miniflare 5 の新しい設定形式へは公式の変換関数で移す（v4 形式の方が読みやすいため）。
-  mf = new Miniflare(convertV4MiniflareOptions({
-    workers: [
-      {
-        name: 'qraft-api',
-        modulesRoot: new URL('.', root).pathname,
-        // エントリポイント（先頭）と、そこから import される全モジュール。
-        modules: ['workers/api/src/index.js', ...readdirSync(new URL('workers/api/src/', root)).map(file => `workers/api/src/${file}`), 'packages/shared/src/contracts.js']
-          .filter((path, index, all) => all.indexOf(path) === index)
-          .map(path => ({ type: 'ESModule', path: new URL(path, root).pathname })),
-        compatibilityDate: '2026-07-29',
-        d1Databases: ['DB'],
-        bindings: { ENVIRONMENT: 'test', ALLOWED_ORIGINS: WEB_ORIGIN, ACCESS_TEAM_DOMAIN: ISSUER, ACCESS_AUD: AUDIENCE, ATTEMPT_TOKEN_SECRET: 'test-attempt-secret-0123456789abcdef' },
-        outboundService: async request => {
-          if (request.url !== `${ISSUER}/cdn-cgi/access/certs`) return new Response('blocked', { status: 599 });
-          jwksRequests += 1;
-          return Response.json({ keys: [signer.jwk] });
-        }
-      },
-      {
-        // Admin Pages の Service Binding を模した、AdminApi エントリポイントへの入口。
-        name: 'admin-gateway',
-        modules: true,
-        script: 'export default { fetch: (request, env) => env.API.fetch(request) }',
-        compatibilityDate: '2026-07-29',
-        serviceBindings: { API: { name: 'qraft-api', entrypoint: 'AdminApi' } }
-      }
-    ]
+  ({ mf, db } = await startApiWorker({
+    bindings: { ALLOWED_ORIGINS: WEB_ORIGIN, ACCESS_TEAM_DOMAIN: ISSUER, ACCESS_AUD: AUDIENCE },
+    outboundService: async request => {
+      if (request.url !== `${ISSUER}/cdn-cgi/access/certs`) return new Response('blocked', { status: 599 });
+      jwksRequests += 1;
+      return Response.json({ keys: [signer.jwk] });
+    }
   }));
-  db = await mf.getD1Database('DB', 'qraft-api');
-  const migrations = readdirSync(new URL('migrations/', root)).filter(file => file.endsWith('.sql')).sort();
-  for (const file of [...migrations.map(name => `migrations/${name}`), 'scripts/seed.sql']) {
-    for (const sql of statements(file)) await db.prepare(sql).run();
-  }
 });
 
 after(() => mf?.dispose());
