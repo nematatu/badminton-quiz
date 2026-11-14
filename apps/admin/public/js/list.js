@@ -158,7 +158,15 @@ function row(quiz, { onToggleStatus, onDuplicate }) {
   return h(
     'tr',
     null,
-    h('td', null, h('a', { class: 'title-link', href: `#/edit/${encodeURIComponent(quiz.id)}` }, quiz.title), h('small', null, quiz.slug)),
+    h(
+      'td',
+      null,
+      h('a', { class: 'title-link', href: `#/edit/${encodeURIComponent(quiz.id)}` }, quiz.title),
+      // 公開中なら slug を公開ページへのリンクにする（回答者と同じ画面をすぐ確かめられる）
+      quiz.publicUrl
+        ? h('a', { class: 'slug-link', href: quiz.publicUrl, target: '_blank', rel: 'noopener noreferrer' }, quiz.slug, h('span', { class: 'visually-hidden' }, '（公開ページを新しいタブで開く）'))
+        : h('small', null, quiz.slug)
+    ),
     h('td', null, h('span', { class: `status status-${quiz.status}` }, STATUS_LABELS[quiz.status])),
     h('td', { class: 'num' }, quiz.questionCount),
     h('td', null, h('time', { datetime: quiz.updatedAt }, dateFormat.format(new Date(quiz.updatedAt)))),

@@ -72,7 +72,7 @@ const title = `E2Eクイズ ${Date.now()}`;
 
 /* ── 管理画面: 作成 → 公開 ── */
 {
-  const page = await open(ADMIN);
+  const page = await open(ADMIN, { permissions: ['clipboard-read', 'clipboard-write'] });
   await page.getByRole('heading', { name: '問題一覧' }).waitFor();
   await page.locator('.quiz-table').waitFor();
   await shot(page, 'admin-list');
@@ -147,6 +147,23 @@ const title = `E2Eクイズ ${Date.now()}`;
   await page.getByRole('row', { name: new RegExp(title) }).getByRole('button', { name: '公開する' }).click();
   await page.getByRole('row', { name: new RegExp(title) }).getByText('公開中').waitFor();
   await shot(page, 'admin-list-published');
+
+  // 公開中のクイズは、一覧の slug と編集画面から公開ページ（OGP 付きの共有URL）を開ける・URL をコピーできる
+  const slugLink = page.getByRole('row', { name: new RegExp(title) }).getByRole('link', { name: /公開ページを新しいタブで開く/ });
+  const publicUrl = await slugLink.getAttribute('href');
+  assert.match(publicUrl, new RegExp(`^${WEB}/q/[^/]+$`));
+  assert.equal(await slugLink.getAttribute('target'), '_blank');
+  await page.getByRole('row', { name: new RegExp(title) }).getByRole('link', { name: '編集' }).click();
+  await page.getByText('このクイズは公開中です。').waitFor();
+  assert.equal(await page.getByRole('link', { name: /新しいタブで開く/ }).getAttribute('href'), publicUrl);
+  await page.getByRole('button', { name: 'URLをコピー' }).click();
+  await page.getByText('コピーしました').waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), publicUrl);
+  await shot(page, 'admin-editor-published');
+  const publicPage = await page.context().newPage();
+  await publicPage.goto(publicUrl);
+  await publicPage.getByRole('heading', { name: title }).waitFor();
+  await publicPage.close();
   await page.context().close();
 }
 

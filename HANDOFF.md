@@ -31,7 +31,7 @@
 2. ユーザーに確認する: アカウント、ドメイン（公開 / 管理 / API の 3 つ）、Access で許可するメールまたは IdP グループ、staging の要否、attempts の保持期間。
 3. `npx wrangler d1 create qraft-production` で D1 を作り、出力された ID を控える。
 4. 実値を設定し、`npm run preflight` が `OK` になるまで直す。
-   - `workers/api/wrangler.toml`: `routes`、`ALLOWED_ORIGINS`、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、`database_id`、Rate Limiting の `namespace_id`（アカウント内で一意な正整数）
+   - `workers/api/wrangler.toml`: `routes`、`ALLOWED_ORIGINS`、`PUBLIC_SITE_ORIGIN`（公開画面の Origin。`ALLOWED_ORIGINS` にも含める）、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、`database_id`、Rate Limiting の `namespace_id`（アカウント内で一意な正整数）
    - `apps/web/public/config.js` の `PRODUCTION_API_ORIGIN` と `apps/web/public/_headers` の `connect-src`
 5. `npm run db:migrate:remote` と、回答の受付トークンの署名鍵の設定（未設定だと回答を開始できない）:
    `openssl rand -base64 48 | npx wrangler secret put ATTEMPT_TOKEN_SECRET --config workers/api/wrangler.toml`

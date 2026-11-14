@@ -1,5 +1,5 @@
 import { LIMITS, OPTION_COUNT, QUESTION_FIELD_MESSAGES, QUIZ_STATUS, charLength, errorMessage } from '../shared/contracts.js';
-import { h } from '../shared/dom.js';
+import { copyText, h } from '../shared/dom.js';
 import { decodeCsvFile, questionsFromCsv, questionsToCsv } from './csv.js';
 import { openPreview } from './preview.js';
 
@@ -13,6 +13,34 @@ import { openPreview } from './preview.js';
  * - 未保存の変更があるかを isDirty() で返す。変更のたびに onChange を呼ぶ（下書きの自動保存用）。
  * - initial を渡すと、quiz ではなくその内容で欄を埋める（自動保存した下書きの復元用）。
  */
+
+/** 公開ページへのリンクと、共有URLのコピー。コピーするのは貼り付け先で壊れないエンコード済みの URL。 */
+function publicLink(url) {
+  const result = h('span', { class: 'copy-result', role: 'status' });
+  let label = url;
+  try {
+    label = decodeURI(url); // 日本語の slug を読める形で表示する
+  } catch {
+    // 表示用なので、デコードできなければそのまま出す
+  }
+  return h(
+    'p',
+    { class: 'public-link' },
+    h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, label, h('span', { class: 'visually-hidden' }, '（新しいタブで開く）')),
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'button small',
+        onclick: async () => {
+          result.textContent = (await copyText(url)) ? 'コピーしました' : 'コピーできませんでした';
+        }
+      },
+      'URLをコピー'
+    ),
+    result
+  );
+}
 
 let uid = 0;
 const nextId = prefix => `${prefix}-${(uid += 1)}`;
@@ -54,7 +82,12 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
     },
     notice,
     quiz?.status === QUIZ_STATUS.PUBLISHED &&
-      h('p', { class: 'banner' }, 'このクイズは公開中です。保存した内容はすぐに回答者へ反映されます。'),
+      h(
+        'div',
+        { class: 'banner' },
+        h('p', null, 'このクイズは公開中です。保存した内容はすぐに回答者へ反映されます。'),
+        quiz.publicUrl && publicLink(quiz.publicUrl)
+      ),
     formError,
     h(
       'section',
