@@ -78,10 +78,20 @@ async function submitAttempt(request, { env, cors, params }) {
   const score = details.filter(detail => detail.correct).length;
 
   // 記録が「この挑戦の採点は 1 回だけ」の保証を兼ねるので、応答の前に書き込む。
-  const recorded = await recordAttempt(env.DB, { quizId: quiz.id, sessionId, contentVersion: quiz.contentVersion, score, total: details.length, answers });
+  const { recorded, correctRates } = await recordAttempt(env.DB, {
+    quizId: quiz.id,
+    sessionId,
+    contentVersion: quiz.contentVersion,
+    score,
+    total: details.length,
+    answers,
+    correct: details.map(detail => detail.correct)
+  });
   if (!recorded) throw new HttpError(409, 'attempt_already_submitted');
 
-  return json({ score, total: details.length, details }, { status: 201, headers: cors });
+  // みんなの正答率（今回の回答を含む）。回答が少ない設問は null
+  const withRates = details.map((detail, index) => ({ ...detail, correctRate: correctRates[index] === null ? null : Math.round(correctRates[index] * 1000) / 1000 }));
+  return json({ score, total: details.length, details: withRates }, { status: 201, headers: cors });
 }
 
 async function health(_request, { env, cors }) {

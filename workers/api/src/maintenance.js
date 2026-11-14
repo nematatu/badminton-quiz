@@ -1,10 +1,11 @@
-import { deleteAttemptsBefore } from './repository.js';
+import { deleteAttemptsBefore, deleteOutdatedQuestionStats } from './repository.js';
 
 /**
  * 定期実行（Cron Trigger）の保守処理。
  *
  * 回答記録（attempts）は個人を特定しない集計用データだが、無期限には持たない。
  * ATTEMPT_RETENTION_DAYS（既定 365 日）を過ぎたものを毎日削除する。
+ * あわせて、問題内容の更新で使われなくなった版の設問別集計（question_stats）も削除する。
  */
 
 export const DEFAULT_RETENTION_DAYS = 365;
@@ -26,6 +27,7 @@ export async function purgeExpiredAttempts(env, now = new Date()) {
   const days = retentionDays(env);
   const cutoff = new Date(now.getTime() - days * DAY_MS);
   const deleted = await deleteAttemptsBefore(env.DB, cutoff);
-  console.log(JSON.stringify({ event: 'attempts_purged', deleted, retentionDays: days, cutoff: cutoff.toISOString() }));
+  const outdatedStats = await deleteOutdatedQuestionStats(env.DB);
+  console.log(JSON.stringify({ event: 'attempts_purged', deleted, outdatedStats, retentionDays: days, cutoff: cutoff.toISOString() }));
   return deleted;
 }

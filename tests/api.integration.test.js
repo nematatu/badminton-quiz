@@ -157,7 +157,8 @@ describe('公開API', () => {
     const result = await response.json();
     assert.equal(result.score, 5);
     assert.equal(result.total, 6);
-    assert.deepEqual(result.details[5], { selectedIndex: 0, correctIndex: 3, correct: false, explanation: result.details[5].explanation });
+    // みんなの正答率は回答が 5 件そろうまで出さない（null）
+    assert.deepEqual(result.details[5], { selectedIndex: 0, correctIndex: 3, correct: false, explanation: result.details[5].explanation, correctRate: null });
     const afterCount = await db.prepare('SELECT COUNT(*) AS n FROM attempts').first();
     assert.equal(afterCount.n, countBefore.n + 1);
   });
@@ -419,6 +420,43 @@ describe('管理API（AdminApi エントリポイント）', () => {
     assert.equal(afterEdit.totalAttempts, 4);
     assert.equal(afterEdit.averageRate, null);
     assert.equal(afterEdit.questions[0].correctRate, null);
+  });
+
+  test('みんなの正答率: 5 回答から返し、使い回しのトークンでは数えず、古い版の集計は定期実行で消す', async () => {
+    const { body: quiz } = await admin('quizzes', { method: 'POST', body: sampleQuiz('みんなの正答率') });
+    await admin(`quizzes/${quiz.id}/status`, { method: 'POST', body: { status: 'published', version: quiz.version } });
+    const slug = encodeURIComponent(quiz.slug);
+    const rates = async body => (await (await submit(slug, body)).json()).details.map(detail => detail.correctRate);
+
+    // 正解は [1, 0]
+    for (const body of [{ answers: [1, 0] }, { answers: [1, 2] }, { answers: [3, 0] }, { answers: [1, -1], timedOut: true }]) {
+      assert.deepEqual(await rates(body), [null, null], '4 件までは出さない');
+    }
+    const token = await startSession(slug);
+    const fifth = await postJson(`/v1/quizzes/${slug}/attempts`, { token, answers: [1, 0] });
+    assert.deepEqual((await fifth.json()).details.map(detail => detail.correctRate), [0.8, 0.6], '今回の回答を含めた正答率');
+
+    // 同じトークンでの再送信は拒否され、集計にも数えない
+    const replay = await postJson(`/v1/quizzes/${slug}/attempts`, { token, answers: [3, 3] });
+    assert.equal(replay.status, 409);
+    await replay.arrayBuffer();
+    const counters = await db.prepare('SELECT position, responses, correct FROM question_stats WHERE quiz_id = ?1 ORDER BY position').bind(quiz.id).all();
+    assert.deepEqual(counters.results, [
+      { position: 0, responses: 5, correct: 4 },
+      { position: 1, responses: 5, correct: 3 }
+    ]);
+
+    // 問題を編集すると新しい版で数え直し、古い版の集計は定期実行で削除される
+    const current = await admin(`quizzes/${quiz.id}`);
+    await admin(`quizzes/${quiz.id}`, { method: 'PUT', body: { ...sampleQuiz('みんなの正答率'), version: current.body.version } });
+    assert.deepEqual(await rates({ answers: [1, 0] }), [null, null]);
+    await purgeExpiredAttempts({ DB: db });
+    const left = await db.prepare('SELECT content_version, responses FROM question_stats WHERE quiz_id = ?1 ORDER BY position').bind(quiz.id).all();
+    const { content_version: latest } = await db.prepare('SELECT content_version FROM quizzes WHERE id = ?1').bind(quiz.id).first();
+    assert.deepEqual(left.results, [
+      { content_version: latest, responses: 1 },
+      { content_version: latest, responses: 1 }
+    ]);
   });
 
   test('複製すると下書きのコピーができ、変更履歴に残る', async () => {

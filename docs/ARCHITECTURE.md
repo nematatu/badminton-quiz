@@ -38,6 +38,9 @@ Internet
   実行されるため、照合に失敗した場合は何も変わらない。途中の文が失敗すれば batch 全体が巻き戻る。
 - 監査ログ（`audit_events`）は物理削除後も残す（`quiz_id` に外部キーなし）。
 - 回答履歴（`attempts`）は個人識別子を持たない（回答配列・得点・時刻のみ）。
+- 設問別の集計（`question_stats`）は「問題内容の版 × 設問」ごとの回答数・正解数だけを持つ。採点時に
+  `attempts` への記録と同じ batch で加算し（記録が重複して何もしなかった場合は加算しない）、
+  「みんなの正答率」として返す。古い版の行は定期実行で削除する。
 
 ## API
 
@@ -49,7 +52,7 @@ Internet
 | GET | `/v1/quizzes?cursor=` | 公開クイズ一覧を新しい順に 30 件ずつ（`{ quizzes, total, nextCursor }`。キーセット方式） | 30 秒 + ETag |
 | GET | `/v1/quizzes/:slug` | 問題（正解・解説なし） | 30 秒 + ETag |
 | POST | `/v1/quizzes/:slug/sessions` | 挑戦の開始。受付トークンと、同じ版の問題（正解なし）を返す | no-store |
-| POST | `/v1/quizzes/:slug/attempts` | `{ token, answers, timedOut }` を採点（トークン 1 つにつき 1 回） | no-store |
+| POST | `/v1/quizzes/:slug/attempts` | `{ token, answers, timedOut }` を採点（トークン 1 つにつき 1 回）。各問の正解・解説と、みんなの正答率 `correctRate`（回答 5 件未満は `null`） | no-store |
 
 **受付トークン**（`workers/api/src/attempt-session.js`）: HMAC-SHA256 で署名した
 `{ sid, slug, 問題内容の版, 発行時刻, 期限 }`。期限は「制限時間 + 15 秒」（時間制限なしは 24 時間）。
