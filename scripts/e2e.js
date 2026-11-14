@@ -273,6 +273,35 @@ for (const [name, options] of [
   await page.context().close();
 }
 
+/* ── 管理画面: CSV から問題を読み込み、書き出すと同じ内容になる ── */
+{
+  const page = await open(`${ADMIN}/#/new`, { viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  await page.getByLabel('タイトル').waitFor();
+  const csv = '\uFEFF問題文,選択肢1,選択肢2,選択肢3,選択肢4,正解,解説\r\nシャトルの羽根は何枚？,14枚,16枚,18枚,20枚,2,16枚です\r\n"カンマ, を含む問題",A,B,C,D,4,\r\n';
+  await page.locator('input[type="file"]').setInputFiles({ name: 'questions.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await page.locator('[data-question]').nth(1).waitFor();
+  assert.equal(await page.locator('[data-question]').count(), 2);
+  assert.equal(await page.locator('[data-question]').nth(0).getByLabel('問題文').inputValue(), 'シャトルの羽根は何枚？');
+  assert.equal(await page.locator('[data-question]').nth(0).getByLabel('選択肢2を正解にする').isChecked(), true);
+  assert.equal(await page.locator('[data-question]').nth(1).getByLabel('問題文').inputValue(), 'カンマ, を含む問題');
+  await shot(page, 'admin-csv-imported');
+
+  // ヘッドレス Chromium は日本語のファイル名を download に置き換えるため、E2E では英数字のタイトルで確かめる
+  await page.getByLabel('タイトル').fill('CSV round/trip');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'CSV に書き出す' }).click()]);
+  assert.equal(download.suggestedFilename(), 'CSV round_trip.csv');
+  const exported = readFileSync(await download.path(), 'utf8');
+  assert.equal(exported.replace(/,\r\n$/, ',\r\n'), csv, '読み込んだ CSV と同じ内容で書き出される');
+
+  // 誤りのある CSV は読み込まず、何行目が悪いかを表示する（今の問題は消さない）
+  await page.locator('input[type="file"]').setInputFiles({ name: 'bad.csv', mimeType: 'text/csv', buffer: Buffer.from('正解が範囲外の問題,A,B,C,D,9,\n') });
+  await page.getByText('1 行目: 正解は 1〜4 の数字で入力してください').waitFor();
+  assert.equal(await page.locator('[data-question]').count(), 2);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('link', { name: '問題一覧' }).click();
+  await page.context().close();
+}
+
 /* ── 管理画面: スマートフォン幅（375px）で主要画面が横にはみ出さない ── */
 {
   const page = await open(`${ADMIN}/#/new`, { viewport: { width: 375, height: 740 }, isMobile: true, hasTouch: true });
