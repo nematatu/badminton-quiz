@@ -26,6 +26,12 @@ test('長すぎる値は切り詰めずに拒否する（コードポイント�
   rejects({ ...valid, description: 'あ'.repeat(LIMITS.description + 1) }, 'invalid_description');
 });
 
+test('選択肢の入れ替えは真偽値の true のときだけ有効（既定は入れ替えない）', () => {
+  assert.equal(validateQuizInput(valid).shuffleOptions, false);
+  assert.equal(validateQuizInput({ ...valid, shuffleOptions: true }).shuffleOptions, true);
+  for (const value of [false, 'true', 1, null]) assert.equal(validateQuizInput({ ...valid, shuffleOptions: value }).shuffleOptions, false, String(value));
+});
+
 test('制限時間は任意で、指定時は範囲内の整数', () => {
   assert.equal(validateQuizInput({ ...valid, timeLimitSeconds: 60 }).timeLimitSeconds, 60);
   assert.equal(validateQuizInput({ ...valid, timeLimitSeconds: '' }).timeLimitSeconds, null);

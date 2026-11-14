@@ -9,7 +9,9 @@ const T0 = Date.UTC(2026, 0, 1);
 test('制限時間 + 猶予までは受け付け、それを過ぎたら attempt_expired', async () => {
   const { token, expiresAt } = await issueSession(env, quiz, T0);
   assert.equal(expiresAt, new Date(T0 + 60_000 + SUBMIT_GRACE_MS).toISOString());
-  assert.equal(typeof (await verifySession(env, token, quiz, T0 + 60_000 + SUBMIT_GRACE_MS)), 'string');
+  const verified = await verifySession(env, token, quiz, T0 + 60_000 + SUBMIT_GRACE_MS);
+  assert.equal(typeof verified.sessionId, 'string');
+  assert.equal(verified.shuffle, false);
   await assert.rejects(verifySession(env, token, quiz, T0 + 60_000 + SUBMIT_GRACE_MS + 1), { status: 409, code: 'attempt_expired' });
 });
 
@@ -33,4 +35,11 @@ test('別の鍵・別のクイズ・壊れたトークンは invalid_session、�
 test('署名鍵が未設定・短すぎる場合は発行も検証もしない（500）', async () => {
   await assert.rejects(issueSession({}, quiz), { status: 500 });
   await assert.rejects(issueSession({ ATTEMPT_TOKEN_SECRET: 'short' }, quiz), { status: 500 });
+});
+
+test('選択肢を入れ替えて出題したかはトークンが覚えており、回答中に設定が変わっても見せた順番で採点できる', async () => {
+  const issued = await issueSession(env, { ...quiz, shuffleOptions: true }, T0);
+  assert.equal(issued.shuffle, true);
+  // 発行後に設定を切っても、検証結果はトークンに書いた値（入れ替えた）になる
+  assert.deepEqual(await verifySession(env, issued.token, { ...quiz, shuffleOptions: false }, T0), { sessionId: issued.sessionId, shuffle: true });
 });

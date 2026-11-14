@@ -3,7 +3,7 @@
 Cloudflare 上で、管理系と公開系を分離して動かす 4 択クイズサービス。
 
 - **公開画面**（`apps/web`）: クイズ一覧（タイトル・説明で検索）→ 導入 → 回答 → サーバー採点 → 解説・間違えた問題の復習・X でシェア（共有URLにはクイズ名のプレビュー付き）
-- **管理画面**（`apps/admin`）: クイズの作成・編集・複製・並べ替え・公開管理、問題の CSV 読み込み・書き出し、公開ページへのリンクと共有URLのコピー、回答の分析と変更履歴。Cloudflare Access で保護
+- **管理画面**（`apps/admin`）: クイズの作成・編集・複製・並べ替え・公開管理、選択肢の入れ替え設定、問題の CSV 読み込み・書き出し、公開ページへのリンクと共有URLのコピー、回答の分析と変更履歴。Cloudflare Access で保護
 - **API**（`workers/api`）: 公開API（インターネット向け）と管理API（Service Binding 専用）、D1
 
 設計の詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、今回の見直し内容は [docs/REFACTORING.md](docs/REFACTORING.md)、

@@ -490,6 +490,48 @@ describe('管理API（AdminApi エントリポイント）', () => {
     ]);
   });
 
+  test('選択肢の入れ替え: 挑戦ごとに並び順を変え、見せた順番で採点し、記録は元の位置で残す', async () => {
+    const { body: quiz } = await admin('quizzes', { method: 'POST', body: { ...sampleQuiz('入れ替えテスト'), shuffleOptions: true } });
+    assert.equal(quiz.shuffleOptions, true);
+    await admin(`quizzes/${quiz.id}/status`, { method: 'POST', body: { status: 'published', version: quiz.version } });
+    const slug = encodeURIComponent(quiz.slug);
+    const original = sampleQuiz().questions;
+
+    const orders = new Set();
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const started = await (await postJson(`/v1/quizzes/${slug}/sessions`, {})).json();
+      const shown = started.quiz.questions;
+      shown.forEach((question, index) => assert.deepEqual([...question.options].sort(), [...original[index].options].sort(), '中身は同じで順番だけ違う'));
+      orders.add(JSON.stringify(shown.map(question => question.options)));
+
+      // 正解の選択肢を「見せた位置」で答える（1問目は正解、2問目はわざと不正解）
+      const correctShown = shown.map((question, index) => question.options.indexOf(original[index].options[original[index].correctIndex]));
+      const wrongShown = (correctShown[1] + 1) % 4;
+      const response = await postJson(`/v1/quizzes/${slug}/attempts`, { token: started.token, answers: [correctShown[0], wrongShown] });
+      const result = await response.json();
+      assert.equal(result.score, 1);
+      // 結果の位置は見せた順番のまま（画面はそのまま正解・自分の回答を表示できる）
+      assert.deepEqual(result.details.map(detail => detail.correctIndex), correctShown);
+      assert.deepEqual(result.details.map(detail => detail.selectedIndex), [correctShown[0], wrongShown]);
+    }
+    assert.ok(orders.size > 1, '挑戦ごとに並び順が変わる');
+
+    // 記録は元の位置（分析の選択肢分布が入れ替えの有無に関係なく正しい）
+    const { body: stats } = await admin(`quizzes/${quiz.id}/stats`);
+    assert.equal(stats.questions[0].optionCounts[original[0].correctIndex], 8);
+    assert.equal(stats.questions[0].correctRate, 1);
+    assert.equal(stats.questions[1].correctRate, 0);
+    assert.equal(stats.questions[1].optionCounts[original[1].correctIndex], 0);
+
+    // 入れ替えない設定（既定）では元の順番のまま。複製しても設定を引き継ぐ
+    const copy = (await admin(`quizzes/${quiz.id}/duplicate`, { method: 'POST' })).body;
+    assert.equal(copy.shuffleOptions, true);
+    const plain = (await admin(`quizzes/${quiz.id}`, { method: 'PUT', body: { ...sampleQuiz('入れ替えテスト'), version: 2 } })).body;
+    assert.equal(plain.shuffleOptions, false);
+    const unshuffled = await (await postJson(`/v1/quizzes/${slug}/sessions`, {})).json();
+    assert.deepEqual(unshuffled.quiz.questions.map(question => question.options), original.map(question => question.options));
+  });
+
   test('複製すると下書きのコピーができ、変更履歴に残る', async () => {
     const { body: source } = await admin('quizzes', { method: 'POST', body: sampleQuiz('複製元') });
     const copied = await admin(`quizzes/${source.id}/duplicate`, { method: 'POST' });

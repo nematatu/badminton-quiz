@@ -111,7 +111,10 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
           placeholder: '空欄なら制限なし'
         }),
         { hint: `クイズ全体で${LIMITS.timeLimitSeconds.min}〜${LIMITS.timeLimitSeconds.max}秒。空欄なら時間制限なし。` }
-      )
+      ),
+      checkboxField('選択肢の順番を挑戦ごとに入れ替える', h('input', { type: 'checkbox', name: 'shuffleOptions', checked: Boolean(values?.shuffleOptions) }), {
+        hint: '再挑戦で「答えは B だった」と位置を覚えて解けないようにします。「上記すべて」のように順番に意味がある選択肢があるクイズでは使わないでください。'
+      })
     ),
     h(
       'section',
@@ -298,7 +301,7 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
     }));
   }
 
-  /** 名前でフォームの入力欄を取り出す（title / description / timeLimitSeconds）。 */
+  /** 名前でフォームの入力欄を取り出す（title / description / timeLimitSeconds / shuffleOptions）。 */
   const control = name => /** @type {HTMLInputElement | HTMLTextAreaElement | null} */ (form.elements.namedItem(name));
 
   function read() {
@@ -307,6 +310,7 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
       title: control('title').value,
       description: control('description').value,
       timeLimitSeconds: timeLimit === '' ? null : Number(timeLimit),
+      shuffleOptions: /** @type {HTMLInputElement} */ (control('shuffleOptions')).checked,
       questions: readQuestions([...questions.children]),
       ...(quiz ? { version: quiz.version } : {})
     };
@@ -385,6 +389,14 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
     showServerError,
     submit: () => form.requestSubmit(submitButton)
   };
+}
+
+/** チェックボックスの設定欄。説明は aria-describedby でチェックボックスに結び付ける。 */
+function checkboxField(label, control, { hint }) {
+  const id = nextId('field');
+  control.id = id;
+  control.setAttribute('aria-describedby', `${id}-hint`);
+  return h('div', { class: 'field checkbox-field' }, h('label', { for: id }, control, h('span', null, label)), h('small', { id: `${id}-hint`, class: 'hint' }, hint));
 }
 
 /**
