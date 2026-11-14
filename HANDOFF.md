@@ -32,7 +32,7 @@
 3. `npx wrangler d1 create qraft-production` で D1 を作り、出力された ID を控える。
 4. 実値を設定し、`npm run preflight` が `OK` になるまで直す。
    - `workers/api/wrangler.toml`: `routes`、`ALLOWED_ORIGINS`、`PUBLIC_SITE_ORIGIN`（公開画面の Origin。`ALLOWED_ORIGINS` にも含める）、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、`database_id`、Rate Limiting の `namespace_id`（アカウント内で一意な正整数）
-   - `apps/web/public/config.js` の `PRODUCTION_API_ORIGIN` と `apps/web/public/_headers` の `connect-src`
+   - `apps/web/public/config.js` の `PRODUCTION_API_ORIGIN`、`apps/web/public/_headers` の `connect-src`、`apps/web/public/index.html` の `preconnect`
 5. `npm run db:migrate:remote` と、回答の受付トークンの署名鍵の設定（未設定だと回答を開始できない）:
    `openssl rand -base64 48 | npx wrangler secret put ATTEMPT_TOKEN_SECRET --config workers/api/wrangler.toml`
 6. `npm run deploy:api` → `npm run deploy:admin` → `npm run deploy:web`（この順。Admin と Web の Service Binding 先の API が先に必要）
