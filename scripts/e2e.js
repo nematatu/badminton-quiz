@@ -300,9 +300,13 @@ for (const [name, options] of [
     await page.getByRole('button', { name: '間違えた 1 問を復習する' }).click();
     await page.getByRole('heading', { name: '1 + 1 は？' }).waitFor();
     assert.equal(await page.getByRole('button', { name: '答えを確かめる' }).isDisabled(), true);
-    await page.getByText('3', { exact: true }).click();
-    await page.getByRole('button', { name: '答えを確かめる' }).click();
+    // 本番の設問と同じく、キーボードの 3 で選び Enter で確かめられる
+    await page.keyboard.press('3');
+    assert.equal(await page.locator('input[name="answer"]:checked').getAttribute('value'), '2');
+    await page.keyboard.press('Enter');
     await page.getByRole('status').filter({ hasText: '不正解' }).waitFor();
+    await page.keyboard.press('2');
+    assert.equal(await page.locator('input[name="answer"]:checked').getAttribute('value'), '2', '確かめた後はキーでも答えを変えられない');
     assert.match(await page.getByRole('status').filter({ hasText: '不正解' }).innerText(), /正解は B\. 2/);
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), '復習を終える', '確かめた後は「次へ」にフォーカスが移る');
     assert.equal(await page.locator('input[name="answer"]:not(:disabled)').count(), 0, '確かめた後は答えを変えられない');
