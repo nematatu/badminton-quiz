@@ -180,6 +180,13 @@ main { width: 100%; padding: 0 20px; }
 .quiz-card-body .muted { font-size: 14px; overflow-wrap: anywhere; }
 .quiz-card-meta { color: var(--accent); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .quiz-list + .button.wide { margin-top: 16px; }
+.search { display: flex; gap: 8px; margin: 0 0 16px; }
+.search input {
+  flex: 1; min-width: 0; min-height: 44px; padding: 8px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  background: var(--surface); color: inherit; font: inherit;
+}
+.search input:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; border-color: var(--accent); }
 .list-status { margin: 8px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
 .empty { padding: 40px; border: 1px dashed var(--line); border-radius: var(--radius-m); text-align: center; color: var(--muted); }
 

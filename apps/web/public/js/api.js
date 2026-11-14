@@ -37,8 +37,17 @@ async function request(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-/** 公開一覧の 1 ページ。cursor は前ページの nextCursor。 */
-export const fetchQuizzes = (cursor = null) => request(`/v1/quizzes${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+/**
+ * 公開一覧の 1 ページ。q は検索語（タイトル・説明の部分一致）、cursor は前ページの nextCursor。
+ * @param {{ q?: string, cursor?: string | null }} [options]
+ */
+export function fetchQuizzes({ q = '', cursor = null } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (cursor) params.set('cursor', cursor);
+  const search = params.toString();
+  return request(`/v1/quizzes${search ? `?${search}` : ''}`);
+}
 
 export const fetchQuiz = slug => request(`/v1/quizzes/${encodeURIComponent(slug)}`);
 
