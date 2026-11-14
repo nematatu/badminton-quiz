@@ -181,7 +181,7 @@ function insertQuestion(db, quizId, question, guard) {
     .bind(...values, guard);
 }
 
-function insertAudit(db, { actor, action, quizId, metadata = {}, guard }) {
+function insertAudit(db, { actor, action, quizId, metadata = {}, guard = null }) {
   const values = [crypto.randomUUID(), actor, action, quizId, JSON.stringify(metadata), now()];
   if (!guard) {
     return db.prepare('INSERT INTO audit_events (id, actor, action, quiz_id, metadata_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(...values);
@@ -195,7 +195,7 @@ function insertAudit(db, { actor, action, quizId, metadata = {}, guard }) {
     .bind(...values, guard);
 }
 
-export async function createQuiz(db, { input, slug, actor, duplicatedFrom }) {
+export async function createQuiz(db, { input, slug, actor, duplicatedFrom = null }) {
   const id = crypto.randomUUID();
   const timestamp = now();
   await db.batch([

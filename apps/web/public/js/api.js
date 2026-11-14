@@ -16,6 +16,10 @@ const REQUEST_TIMEOUT_MS = 15_000;
 /**
  * 公開APIの呼び出し。GET には Content-Type を付けない（CORS の preflight を発生させない）。
  */
+/**
+ * @param {string} path
+ * @param {{ method?: string, body?: unknown }} [options]
+ */
 async function request(path, { method = 'GET', body } = {}) {
   let response;
   try {

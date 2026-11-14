@@ -41,6 +41,11 @@ function announce(message) {
 /** 同じ挑戦では再送信しても通らない採点エラー。最初からやり直してもらう。 */
 const RESTART_REQUIRED = new Set(['quiz_updated', 'attempt_expired', 'attempt_already_submitted', 'invalid_session', 'invalid_answers']);
 
+/**
+ * @param {{ code: string }} error
+ * @param {(() => void) | null} [retry]
+ * @param {{ title?: string, retryLabel?: string }} [options]
+ */
 function showError(error, retry, { title = '読み込めませんでした', retryLabel } = {}) {
   const notFound = error.code === 'not_found';
   setTitle(notFound ? 'クイズが見つかりません' : 'エラー');
@@ -211,11 +216,11 @@ function tick() {
 // ページ全体で効かせると、音声入力の言葉やスクリーンリーダーの 1 文字操作が回答として誤入力される。
 document.addEventListener('keydown', event => {
   if (session?.status !== 'playing' || event.altKey || event.ctrlKey || event.metaKey) return;
-  const form = root.querySelector('.question-card');
+  const form = /** @type {HTMLFormElement | null} */ (root.querySelector('.question-card'));
   if (!form || !root.contains(document.activeElement)) return;
   const index = '1234'.indexOf(event.key) >= 0 ? '1234'.indexOf(event.key) : 'abcd'.indexOf(event.key.toLowerCase());
   if (index >= 0 && event.key.length === 1) {
-    const radio = form.querySelectorAll('input[name="answer"]')[index];
+    const radio = /** @type {HTMLInputElement | undefined} */ (form.querySelectorAll('input[name="answer"]')[index]);
     if (radio) {
       radio.checked = true;
       radio.dispatchEvent(new Event('change', { bubbles: true }));

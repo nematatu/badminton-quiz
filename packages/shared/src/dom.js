@@ -7,10 +7,11 @@
  */
 
 /**
- * @param {string} tag
- * @param {Record<string, unknown> | null} [props]
- * @param {...(Node | string | number | false | null | undefined | Array<any>)} children
- * @returns {HTMLElement}
+ * @template {keyof HTMLElementTagNameMap} K
+ * @param {K} tag
+ * @param {Record<string, any> | null} [props]
+ * @param {...any} children Node・文字列・数値（false / null / undefined は無視、配列は展開）
+ * @returns {HTMLElementTagNameMap[K]} 作った要素（h('button') なら HTMLButtonElement）
  */
 export function h(tag, props, ...children) {
   const element = document.createElement(tag);
@@ -19,7 +20,7 @@ export function h(tag, props, ...children) {
     if (key === 'class') element.className = String(value);
     else if (key === 'dataset') Object.assign(element.dataset, value);
     else if (key === 'style') Object.assign(element.style, value);
-    else if (key.startsWith('on') && typeof value === 'function') element.addEventListener(key.slice(2).toLowerCase(), value);
+    else if (key.startsWith('on') && typeof value === 'function') element.addEventListener(key.slice(2).toLowerCase(), /** @type {EventListener} */ (value));
     else if (key in element && typeof value !== 'string') element[key] = value;
     else element.setAttribute(key, value === true ? '' : String(value));
   }

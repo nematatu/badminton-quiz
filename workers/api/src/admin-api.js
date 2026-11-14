@@ -30,13 +30,15 @@ export function slugFor(title, id) {
 }
 
 const SEARCH_MAX_LENGTH = 80;
+/** @type {readonly string[]} */
+const STATUSES = Object.values(QUIZ_STATUS);
 const isQuizId = value => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value);
 
 /** GET /admin/quizzes?q=&status=&cursor= */
 async function list(request, { env }) {
   const params = new URL(request.url).searchParams;
   const status = params.get('status') || null;
-  if (status !== null && !Object.values(QUIZ_STATUS).includes(status)) throw new HttpError(400, 'invalid_status');
+  if (status !== null && !STATUSES.includes(status)) throw new HttpError(400, 'invalid_status');
   const keyword = (params.get('q') ?? '').trim();
   if (Array.from(keyword).length > SEARCH_MAX_LENGTH) throw new HttpError(400, 'invalid_search');
   const cursor = params.get('cursor');

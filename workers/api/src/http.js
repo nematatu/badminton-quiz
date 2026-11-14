@@ -95,7 +95,7 @@ export async function readJson(request, maxBytes) {
   }
 
   try {
-    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes));
   } catch {
     throw new HttpError(400, 'invalid_json');
   }

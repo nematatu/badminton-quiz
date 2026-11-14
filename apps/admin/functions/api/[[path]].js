@@ -37,13 +37,14 @@ export async function onRequest({ request, env, params }) {
     if (value !== null) headers.set(name, value);
   }
 
-  return env.API.fetch(
-    new Request(target, {
-      method: request.method,
-      headers,
-      body: SAFE_METHODS.has(request.method) ? null : request.body,
-      duplex: 'half',
-      redirect: 'manual'
-    })
-  );
+  // duplex は本文をストリームのまま転送するための指定（Node の fetch で必須、Workers では無視される）。
+  // Workers の型定義に無い項目なので、型チェックの対象から外す。
+  const init = /** @type {RequestInit} */ (/** @type {unknown} */ ({
+    method: request.method,
+    headers,
+    body: SAFE_METHODS.has(request.method) ? null : request.body,
+    duplex: 'half',
+    redirect: 'manual'
+  }));
+  return env.API.fetch(new Request(target, init));
 }
