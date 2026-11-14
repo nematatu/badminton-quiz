@@ -1,5 +1,5 @@
 import { h } from '../shared/dom.js';
-import { describeQuiz } from '../shared/contracts.js';
+import { LIMITS, describeQuiz } from '../shared/contracts.js';
 import { formatDuration, resultMessage, shareText } from './session.js';
 
 /**
@@ -44,55 +44,135 @@ function quizItem(quiz) {
 }
 
 /**
- * トップ（一覧）。page は最初の 1 ページ。続きは「もっと見る」で loadMore(cursor) を呼んで追加する。
+ * トップ（一覧）。page は最初の 1 ページ（query で絞り込み済み）。
+ * 検索と「もっと見る」は画面を作り直さずに一覧だけを差し替え・追加する（入力欄のフォーカスと位置を保つ）。
+ *
+ * @param {{ quizzes: object[], total: number, nextCursor: string | null }} page
+ * @param {{ query?: string, fetchPage: (options: { q: string, cursor?: string | null }) => Promise<any>, onSearch?: (q: string) => void }} options
+ *   fetchPage は失敗すると利用者向けのメッセージを持つ Error を投げる。onSearch は検索語が変わったとき（URL の更新用）。
  */
-export function homeView(page, { loadMore }) {
-  const list = h('ul', { class: 'quiz-list' }, page.quizzes.map(quizItem));
-  const status = h('p', { class: 'list-status', role: 'status' });
+export function homeView(page, { query = '', fetchPage, onSearch = () => {} }) {
+  if (!query && page.total === 0) {
+    return [hero(), h('section', { class: 'catalog' }, h('div', { class: 'section-head' }, h('h2', null, '公開中のクイズ')), h('p', { class: 'empty' }, '公開中のクイズはまだありません。'))];
+  }
+
+  let currentQuery = query;
   let cursor = page.nextCursor;
+  let request = 0; // 遅れて届いた古い検索結果で上書きしないための番号
+
+  const list = h('ul', { class: 'quiz-list' });
+  const count = h('span', { class: 'count' });
+  const empty = h('p', { class: 'empty' });
+  const status = h('p', { class: 'list-status', role: 'status' });
+  const input = h('input', { type: 'search', name: 'q', value: query, maxLength: LIMITS.search, placeholder: 'タイトル・説明で探す', 'aria-label': 'クイズを検索', enterKeyHint: 'search' });
+
+  const show = (result, { append = false } = {}) => {
+    const items = result.quizzes.map(quizItem);
+    if (append) list.append(...items);
+    else list.replaceChildren(...items);
+    cursor = result.nextCursor;
+    moreButton.hidden = !cursor;
+    count.textContent = `${result.total}件`;
+    list.hidden = list.children.length === 0;
+    empty.hidden = list.children.length > 0;
+    empty.textContent = `「${currentQuery}」に一致するクイズはありません。`;
+    return items;
+  };
+
   const moreButton = h(
     'button',
     {
       type: 'button',
       class: 'button ghost wide',
-      hidden: !cursor,
       onclick: async () => {
+        const mine = ++request;
         moreButton.disabled = true;
         status.textContent = '読み込み中…';
         try {
-          const next = await loadMore(cursor);
-          const items = next.quizzes.map(quizItem);
-          list.append(...items);
-          cursor = next.nextCursor;
-          moreButton.hidden = !cursor;
+          const next = await fetchPage({ q: currentQuery, cursor });
+          if (mine !== request) return;
+          const items = show(next, { append: true });
           status.textContent = `${list.children.length}件を表示中`;
           // 追加分の先頭へフォーカスを移し、キーボード操作で続きから選べるようにする
           items[0]?.querySelector('a').focus();
         } catch (error) {
-          status.textContent = error.message;
+          if (mine === request) status.textContent = error.message;
         } finally {
-          moreButton.disabled = false;
+          if (mine === request) moreButton.disabled = false;
         }
       }
     },
     'もっと見る'
   );
 
+  const search = async q => {
+    // 新しい検索を始めた時点で、まだ届いていない検索・「もっと見る」の応答は捨てる
+    // （表示中と同じ語に戻した場合も、先に送った別の語の結果で上書きされないように）
+    const mine = ++request;
+    if (q === currentQuery) {
+      moreButton.disabled = false;
+      status.textContent = '';
+      return;
+    }
+    // 検索中に「もっと見る」で古い語の続きを読み込むと、結果と入力欄が食い違うので止める
+    moreButton.disabled = true;
+    status.textContent = '検索中…';
+    try {
+      const result = await fetchPage({ q });
+      if (mine !== request) return;
+      currentQuery = q;
+      onSearch(q);
+      show(result);
+      status.textContent = q ? `「${q}」の検索結果: ${result.total}件` : `すべてのクイズ: ${result.total}件`;
+    } catch (error) {
+      if (mine === request) status.textContent = error.message;
+    } finally {
+      if (mine === request) moreButton.disabled = false;
+    }
+  };
+
+  const form = h(
+    'form',
+    {
+      class: 'search',
+      role: 'search',
+      onsubmit: event => {
+        event.preventDefault();
+        search(input.value.trim());
+      }
+    },
+    input,
+    h('button', { type: 'submit', class: 'button ghost' }, '検索')
+  );
+  // 入力欄の × ボタン（search イベント）で空にしたら、すぐに全件へ戻す
+  input.addEventListener('search', () => {
+    if (input.value === '') search('');
+  });
+
+  show(page);
   return [
-    h(
-      'section',
-      { class: 'hero' },
-      h('p', { class: 'eyebrow' }, '4択クイズ'),
-      h('h1', null, '知識を試そう。', h('br'), h('em', null, '4つの中からひとつ。')),
-      h('p', { class: 'lead' }, 'クイズを選んで、4つの選択肢から答えてください。全問答えると採点と解説が表示されます。')
-    ),
+    hero(),
     h(
       'section',
       { class: 'catalog', 'aria-labelledby': 'catalog-title' },
-      h('div', { class: 'section-head' }, h('h2', { id: 'catalog-title' }, '公開中のクイズ'), h('span', { class: 'count' }, `${page.total}件`)),
-      page.quizzes.length ? [list, moreButton, status] : h('p', { class: 'empty' }, '公開中のクイズはまだありません。')
+      h('div', { class: 'section-head' }, h('h2', { id: 'catalog-title' }, '公開中のクイズ'), count),
+      form,
+      list,
+      empty,
+      moreButton,
+      status
     )
   ];
+}
+
+function hero() {
+  return h(
+    'section',
+    { class: 'hero' },
+    h('p', { class: 'eyebrow' }, '4択クイズ'),
+    h('h1', null, '知識を試そう。', h('br'), h('em', null, '4つの中からひとつ。')),
+    h('p', { class: 'lead' }, 'クイズを選んで、4つの選択肢から答えてください。全問答えると採点と解説が表示されます。')
+  );
 }
 
 /**

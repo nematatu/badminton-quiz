@@ -142,6 +142,30 @@ describe('公開API', () => {
     }
   });
 
+  test('公開一覧はタイトル・説明で検索でき、下書きは出ない（LIKE の特殊文字はそのまま探す）', async () => {
+    const insert = (slug, title, description, status = 'published') =>
+      db
+        .prepare(
+          "INSERT INTO quizzes (id, slug, title, description, status, created_by, created_at, updated_at, published_at) VALUES (?1, ?2, ?3, ?4, ?5, 'test', ?6, ?6, ?6)"
+        )
+        .bind(crypto.randomUUID(), slug, title, description, status, '2025-06-01T00:00:00.000Z')
+        .run();
+    await insert('search-a', 'シャトル1_0クイズ', '');
+    await insert('search-b', '羽根の話', 'シャトルの羽根について');
+    await insert('search-c', 'シャトル下書き', '', 'draft');
+    await insert('search-d', 'シャトル100クイズ', '');
+
+    const search = async q => (await publicFetch(`/v1/quizzes?q=${encodeURIComponent(q)}`)).json();
+    const shuttle = await search('  シャトル ');
+    assert.deepEqual(shuttle.quizzes.map(quiz => quiz.slug).sort(), ['search-a', 'search-b', 'search-d']);
+    assert.equal(shuttle.total, 3, 'total は絞り込み後の件数');
+    assert.deepEqual((await search('1_0')).quizzes.map(quiz => quiz.slug), ['search-a'], '_ は 1 文字の代わりではなく文字として扱う');
+    assert.deepEqual((await search('存在しない言葉')).quizzes, []);
+
+    const tooLong = await publicFetch(`/v1/quizzes?q=${encodeURIComponent('あ'.repeat(81))}`);
+    assert.deepEqual([tooLong.status, (await tooLong.json()).error], [400, 'invalid_search']);
+  });
+
   test('存在しない・不正な slug は 404', async () => {
     for (const path of ['/v1/quizzes/nothing-here', '/v1/quizzes/has%20space', '/v1/quizzes/%E3']) {
       const response = await publicFetch(path);
