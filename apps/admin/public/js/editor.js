@@ -1,5 +1,6 @@
 import { LIMITS, OPTION_COUNT, QUESTION_FIELD_MESSAGES, QUIZ_STATUS, charLength, errorMessage } from '../shared/contracts.js';
 import { h } from '../shared/dom.js';
+import { decodeCsvFile, questionsFromCsv, questionsToCsv } from './csv.js';
 import { openPreview } from './preview.js';
 
 /**
@@ -28,6 +29,15 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
   const addButton = h('button', { type: 'button', class: 'button', onclick: () => addQuestion() }, '＋ 問題を追加');
   const formError = h('div', { class: 'form-error', role: 'alert', hidden: true });
   const submitButton = h('button', { type: 'submit', class: 'button primary' }, isNew ? '下書きとして保存' : '保存する');
+  const csvStatus = h('div', { class: 'csv-status', role: 'alert', hidden: true });
+  const csvInput = h('input', {
+    type: 'file',
+    accept: '.csv,text/csv',
+    class: 'visually-hidden',
+    tabIndex: -1,
+    'aria-hidden': 'true',
+    onchange: () => importCsv()
+  });
 
   const form = h(
     'form',
@@ -70,7 +80,22 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
         { hint: `クイズ全体で${LIMITS.timeLimitSeconds.min}〜${LIMITS.timeLimitSeconds.max}秒。空欄なら時間制限なし。` }
       )
     ),
-    h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', null, '問題'), h('span', { class: 'muted', 'data-question-count': '' })), questions, addButton),
+    h(
+      'section',
+      { class: 'panel' },
+      h('div', { class: 'panel-head' }, h('h2', null, '問題'), h('span', { class: 'muted', 'data-question-count': '' })),
+      h(
+        'div',
+        { class: 'csv-tools' },
+        h('button', { type: 'button', class: 'button small', onclick: () => csvInput.click() }, 'CSV から読み込む'),
+        h('button', { type: 'button', class: 'button small', onclick: () => exportCsv() }, 'CSV に書き出す'),
+        h('span', { class: 'hint' }, '列: 問題文・選択肢1〜4・正解（1〜4）・解説'),
+        csvInput
+      ),
+      csvStatus,
+      questions,
+      addButton
+    ),
     h(
       'div',
       { class: 'action-bar' },
@@ -90,6 +115,40 @@ export function createEditor(quiz, { onSubmit, onCancel, onDelete, onChange, ini
       )
     )
   );
+
+  /* ───────── CSV ───────── */
+
+  async function importCsv() {
+    const [file] = csvInput.files;
+    csvInput.value = '';
+    if (!file) return;
+    csvStatus.hidden = true;
+    const { questions: imported, errors } = questionsFromCsv(decodeCsvFile(await file.arrayBuffer()));
+    if (errors.length) {
+      csvStatus.replaceChildren(h('p', null, `「${file.name}」を読み込めませんでした。`), h('ul', null, errors.map(error => h('li', null, error))));
+      csvStatus.hidden = false;
+      csvStatus.scrollIntoView({ block: 'center' });
+      return;
+    }
+    const hasContent = readQuestions([...questions.children]).some(question => question.prompt.trim() || question.options.some(option => option.trim()));
+    if (hasContent && !confirm(`今の ${questions.children.length} 問を、CSV の ${imported.length} 問に置き換えますか？`)) return;
+    questions.replaceChildren();
+    for (const question of imported) addQuestion(question, { focus: false });
+    changed();
+    refresh();
+    questions.querySelector('textarea')?.focus();
+  }
+
+  function exportCsv() {
+    const blob = new Blob([questionsToCsv(readQuestions([...questions.children]))], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const title = /** @type {HTMLInputElement} */ (form.elements.namedItem('title')).value.trim();
+    const link = h('a', { href: url, download: `${title.replace(/[\\/:*?"<>|]/g, '_') || 'quiz'}.csv` });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 
   /* ───────── 問題カード ───────── */
 
