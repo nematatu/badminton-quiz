@@ -3,7 +3,7 @@
 Cloudflare 上で、管理系と公開系を分離して動かす 4 択クイズサービス。
 
 - **公開画面**（`apps/web`）: クイズ一覧（タイトル・説明で検索）→ 導入 → 回答 → サーバー採点 → 解説・間違えた問題の復習・X でシェア（共有URLにはクイズ名のプレビュー付き）
-- **管理画面**（`apps/admin`）: クイズの作成・編集・複製・並べ替え・公開管理、問題の CSV 読み込み・書き出し、回答の分析と変更履歴。Cloudflare Access で保護
+- **管理画面**（`apps/admin`）: クイズの作成・編集・複製・並べ替え・公開管理、問題の CSV 読み込み・書き出し、公開ページへのリンクと共有URLのコピー、回答の分析と変更履歴。Cloudflare Access で保護
 - **API**（`workers/api`）: 公開API（インターネット向け）と管理API（Service Binding 専用）、D1
 
 設計の詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、今回の見直し内容は [docs/REFACTORING.md](docs/REFACTORING.md)、
@@ -60,7 +60,7 @@ E2E は初回だけ `npx playwright install chromium` でブラウザを入れ�
 ## デプロイ
 
 1. 実値を設定する（`npm run preflight` が未設定箇所を一覧表示する）
-   - `workers/api/wrangler.toml`: API のドメイン、`ALLOWED_ORIGINS`、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、D1 の `database_id`
+   - `workers/api/wrangler.toml`: API のドメイン、`ALLOWED_ORIGINS`、`PUBLIC_SITE_ORIGIN`（管理画面に出す公開ページの URL）、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、D1 の `database_id`
    - `apps/web/public/config.js` と `apps/web/public/_headers`（CSP `connect-src`）: API の Origin
    - 回答の受付トークンの署名鍵（secret）: `npx wrangler secret put ATTEMPT_TOKEN_SECRET --config workers/api/wrangler.toml`（32 文字以上のランダム値。例: `openssl rand -base64 48`）
 2. remote D1 へ migration を適用し、API → 管理画面 → 公開画面の順にデプロイする

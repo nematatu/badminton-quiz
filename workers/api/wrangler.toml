@@ -10,6 +10,8 @@ routes = [{ pattern = "api.quiz.example.com", custom_domain = true }]
 ENVIRONMENT = "production"
 # 公開画面の Origin。カンマ区切りで完全一致のみ許可する。
 ALLOWED_ORIGINS = "https://quiz.example.com"
+# 公開画面の URL（管理画面に公開ページへのリンクと共有URLを出すために使う）。ALLOWED_ORIGINS にも入れる。
+PUBLIC_SITE_ORIGIN = "https://quiz.example.com"
 # Cloudflare Access の team domain と、Admin 用 Access Application の AUD。
 ACCESS_TEAM_DOMAIN = "https://REPLACE-team.cloudflareaccess.com"
 ACCESS_AUD = "REPLACE-with-access-application-aud"

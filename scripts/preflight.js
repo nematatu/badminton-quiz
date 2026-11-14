@@ -26,6 +26,9 @@ else if (!csp.split(/\s+/).includes(apiOrigin)) problems.push(`apps/web/public/_
 const workerConfig = read('workers/api/wrangler.toml');
 const allowedOrigins = /ALLOWED_ORIGINS\s*=\s*"([^"]*)"/.exec(workerConfig)?.[1] ?? '';
 if (!allowedOrigins.split(',').every(origin => origin.trim().startsWith('https://'))) problems.push('ALLOWED_ORIGINS はすべて https:// の Origin にしてください');
+const publicSiteOrigin = /PUBLIC_SITE_ORIGIN\s*=\s*"([^"]*)"/.exec(workerConfig)?.[1] ?? '';
+if (!publicSiteOrigin.startsWith('https://')) problems.push('PUBLIC_SITE_ORIGIN は https:// の Origin にしてください');
+else if (!allowedOrigins.split(',').map(origin => origin.trim()).includes(publicSiteOrigin)) problems.push(`ALLOWED_ORIGINS に PUBLIC_SITE_ORIGIN（${publicSiteOrigin}）がありません`);
 if (!/ENVIRONMENT\s*=\s*"production"/.test(workerConfig)) problems.push('workers/api/wrangler.toml の ENVIRONMENT は "production" にしてください');
 
 for (const file of outdatedFiles()) problems.push(`${file} が古くなっています（npm run sync:shared）`);

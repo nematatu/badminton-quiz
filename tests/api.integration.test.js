@@ -20,7 +20,7 @@ let jwksRequests = 0;
 
 before(async () => {
   ({ mf, db } = await startApiWorker({
-    bindings: { ALLOWED_ORIGINS: WEB_ORIGIN, ACCESS_TEAM_DOMAIN: ISSUER, ACCESS_AUD: AUDIENCE },
+    bindings: { ALLOWED_ORIGINS: WEB_ORIGIN, PUBLIC_SITE_ORIGIN: WEB_ORIGIN, ACCESS_TEAM_DOMAIN: ISSUER, ACCESS_AUD: AUDIENCE },
     outboundService: async request => {
       if (request.url !== `${ISSUER}/cdn-cgi/access/certs`) return new Response('blocked', { status: 599 });
       jwksRequests += 1;
@@ -323,11 +323,17 @@ describe('管理API（AdminApi エントリポイント）', () => {
 
   test('公開・非公開・削除のライフサイクル', async () => {
     const { body: quiz } = await admin('quizzes', { method: 'POST', body: sampleQuiz('公開テスト') });
+    assert.equal(quiz.publicUrl, null, '下書きには共有URLが無い');
 
     assert.equal((await publicFetch(`/v1/quizzes/${encodeURIComponent(quiz.slug)}`)).status, 404, '下書きは公開されない');
 
     const published = await admin(`quizzes/${quiz.id}/status`, { method: 'POST', body: { status: 'published', version: quiz.version } });
-    assert.deepEqual(published.body, { id: quiz.id, status: 'published', version: 2 });
+    const publicUrl = `${WEB_ORIGIN}/q/${encodeURIComponent(quiz.slug)}`;
+    assert.deepEqual(published.body, { id: quiz.id, status: 'published', version: 2, publicUrl });
+    // 管理画面の編集・一覧にも、公開ページ（OGP 付きの共有URL）へのリンクを返す
+    assert.equal((await admin(`quizzes/${quiz.id}`)).body.publicUrl, publicUrl);
+    const listed = (await admin(`quizzes?q=${encodeURIComponent('公開テスト')}`)).body.quizzes.find(item => item.id === quiz.id);
+    assert.equal(listed.publicUrl, publicUrl);
     const visible = await publicFetch(`/v1/quizzes/${encodeURIComponent(quiz.slug)}`);
     assert.equal(visible.status, 200);
     await visible.arrayBuffer();
@@ -340,6 +346,7 @@ describe('管理API（AdminApi エントリポイント）', () => {
 
     const archived = await admin(`quizzes/${quiz.id}/status`, { method: 'POST', body: { status: 'archived', version: 2 } });
     assert.equal(archived.body.status, 'archived');
+    assert.equal(archived.body.publicUrl, null);
     const hidden = await publicFetch(`/v1/quizzes/${encodeURIComponent(quiz.slug)}`);
     assert.equal(hidden.status, 404, '非公開にすると即座に見えなくなる');
     await hidden.arrayBuffer();
