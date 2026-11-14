@@ -206,15 +206,17 @@ for (const [name, options] of [
       await new Promise(resolve => setTimeout(resolve, 800));
       await route.continue().catch(() => {});
     });
+    // 「もっと見る」は件数が少ないと隠れている（CI の空の DB など）ので、表示の有無に関係なく状態を見る
+    const moreButton = page.locator('.catalog button', { hasText: 'もっと見る' });
     await searchbox.fill('遅い検索');
     await searchbox.press('Enter');
-    assert.equal(await page.getByRole('button', { name: 'もっと見る' }).isDisabled(), true, '検索中は古い語の続きを読み込ませない');
+    assert.equal(await moreButton.isDisabled(), true, '検索中は古い語の続きを読み込ませない');
     await searchbox.fill('');
     await searchbox.press('Enter');
     await page.waitForTimeout(1200);
     assert.ok((await listCount()) > 1);
     assert.equal(await page.evaluate(() => location.hash), '#/');
-    assert.equal(await page.getByRole('button', { name: 'もっと見る' }).isDisabled(), false);
+    assert.equal(await moreButton.isDisabled(), false);
 
     // 検索の途中でクイズを開いても、遅れて届いた結果でクイズの URL を書き換えない
     await searchbox.fill('遅い検索');
