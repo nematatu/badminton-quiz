@@ -78,8 +78,11 @@ async function showHome(query = '') {
           fetchQuizzes(options).catch(error => {
             throw new Error(errorMessage(error.code));
           }),
-        // 検索語を URL に残す（再読み込み・戻る・共有で同じ結果に戻れる）。画面は作り直さない
-        onSearch: q => history.pushState(null, '', homeHash(q))
+        // 検索語を URL に残す（再読み込み・戻る・共有で同じ結果に戻れる）。画面は作り直さない。
+        // 検索中に別の画面へ移動していたら、その画面の URL を書き換えない
+        onSearch: q => {
+          if (isCurrent(current)) history.pushState(null, '', homeHash(q));
+        }
       })
     );
   } catch (error) {

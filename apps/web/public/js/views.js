@@ -98,7 +98,7 @@ export function homeView(page, { query = '', fetchPage, onSearch = () => {} }) {
         } catch (error) {
           if (mine === request) status.textContent = error.message;
         } finally {
-          moreButton.disabled = false;
+          if (mine === request) moreButton.disabled = false;
         }
       }
     },
@@ -106,8 +106,16 @@ export function homeView(page, { query = '', fetchPage, onSearch = () => {} }) {
   );
 
   const search = async q => {
-    if (q === currentQuery) return;
+    // 新しい検索を始めた時点で、まだ届いていない検索・「もっと見る」の応答は捨てる
+    // （表示中と同じ語に戻した場合も、先に送った別の語の結果で上書きされないように）
     const mine = ++request;
+    if (q === currentQuery) {
+      moreButton.disabled = false;
+      status.textContent = '';
+      return;
+    }
+    // 検索中に「もっと見る」で古い語の続きを読み込むと、結果と入力欄が食い違うので止める
+    moreButton.disabled = true;
     status.textContent = '検索中…';
     try {
       const result = await fetchPage({ q });
@@ -118,6 +126,8 @@ export function homeView(page, { query = '', fetchPage, onSearch = () => {} }) {
       status.textContent = q ? `「${q}」の検索結果: ${result.total}件` : `すべてのクイズ: ${result.total}件`;
     } catch (error) {
       if (mine === request) status.textContent = error.message;
+    } finally {
+      if (mine === request) moreButton.disabled = false;
     }
   };
 

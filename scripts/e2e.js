@@ -199,9 +199,35 @@ for (const [name, options] of [
     await searchbox.press('Enter');
     await page.getByText(/すべてのクイズ: \d+件/).waitFor();
     assert.ok((await listCount()) > 1);
+
+    // 応答の遅い検索の途中で入力を空に戻したら、遅れて届いた結果で一覧も URL も変えない
+    const slowSearch = url => url.searchParams.get('q') === '遅い検索';
+    await page.route(slowSearch, async route => {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await route.continue().catch(() => {});
+    });
+    await searchbox.fill('遅い検索');
+    await searchbox.press('Enter');
+    assert.equal(await page.getByRole('button', { name: 'もっと見る' }).isDisabled(), true, '検索中は古い語の続きを読み込ませない');
+    await searchbox.fill('');
+    await searchbox.press('Enter');
+    await page.waitForTimeout(1200);
+    assert.ok((await listCount()) > 1);
+    assert.equal(await page.evaluate(() => location.hash), '#/');
+    assert.equal(await page.getByRole('button', { name: 'もっと見る' }).isDisabled(), false);
+
+    // 検索の途中でクイズを開いても、遅れて届いた結果でクイズの URL を書き換えない
+    await searchbox.fill('遅い検索');
+    await searchbox.press('Enter');
   }
 
   await page.getByRole('link', { name: new RegExp(title) }).click();
+  if (name === 'desktop') {
+    await page.getByRole('button', { name: 'はじめる' }).waitFor();
+    await page.waitForTimeout(1200);
+    assert.match(await page.evaluate(() => location.hash), /^#quiz\//);
+    await page.unrouteAll();
+  }
   await page.getByRole('button', { name: 'はじめる' }).click();
   await page.getByRole('heading', { name: '空の色は？' }).waitFor();
   assert.equal(await page.getByRole('button', { name: '次の問題へ' }).isDisabled(), true);
