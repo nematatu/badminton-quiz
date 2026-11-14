@@ -1,5 +1,6 @@
 import { h } from '../shared/dom.js';
-import { describeQuiz, formatDuration, resultMessage, shareText } from './session.js';
+import { describeQuiz } from '../shared/contracts.js';
+import { formatDuration, resultMessage, shareText } from './session.js';
 
 /**
  * 画面ごとの描画関数。状態は持たず、受け取ったデータとコールバックから
