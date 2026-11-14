@@ -1,4 +1,4 @@
-import { errorMessage } from '../shared/contracts.js';
+import { LIMITS, errorMessage } from '../shared/contracts.js';
 import { copyText, createToast, installSkipLink, mount } from '../shared/dom.js';
 import { fetchQuiz, fetchQuizzes, startSession, submitAttempt } from './api.js';
 import { loadRecord, saveRecord } from './records.js';
@@ -63,26 +63,32 @@ function showError(error, retry, { title = '読み込めませんでした', ret
 
 /* ───────────── 画面 ───────────── */
 
-async function showHome() {
+async function showHome(query = '') {
   const current = nextGeneration();
   setTitle(null);
   mount(root, loadingView());
   try {
-    const page = await fetchQuizzes();
+    const page = await fetchQuizzes({ q: query });
     if (!isCurrent(current)) return;
     mount(
       root,
       homeView(page, {
-        loadMore: cursor =>
-          fetchQuizzes(cursor).catch(error => {
+        query,
+        fetchPage: options =>
+          fetchQuizzes(options).catch(error => {
             throw new Error(errorMessage(error.code));
-          })
+          }),
+        // 検索語を URL に残す（再読み込み・戻る・共有で同じ結果に戻れる）。画面は作り直さない
+        onSearch: q => history.pushState(null, '', homeHash(q))
       })
     );
   } catch (error) {
-    if (isCurrent(current)) showError(error, showHome);
+    if (isCurrent(current)) showError(error, () => showHome(query));
   }
 }
+
+/** 一覧の URL。検索語があれば #/?q=<語> */
+const homeHash = q => (q ? `#/?${new URLSearchParams({ q })}` : '#/');
 
 async function showQuiz(slug) {
   const current = nextGeneration();
@@ -294,12 +300,20 @@ function slugFromUrl() {
   return /^\/q\/([^/]+)\/?$/.exec(location.pathname)?.[1] ?? null;
 }
 
+/** 一覧の URL（#/?q=…）から検索語を取り出す。 */
+function queryFromUrl() {
+  const [, search = ''] = location.hash.split('?');
+  return Array.from((new URLSearchParams(search).get('q') ?? '').trim())
+    .slice(0, LIMITS.search)
+    .join('');
+}
+
 function route() {
   nextGeneration();
   stopTimer();
   session = null;
   const slug = slugFromUrl();
-  if (slug === null) return showHome();
+  if (slug === null) return showHome(queryFromUrl());
   try {
     showQuiz(decodeURIComponent(slug));
   } catch {

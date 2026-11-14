@@ -1,4 +1,4 @@
-import { QUIZ_STATUS, STATUS_LABELS } from '../shared/contracts.js';
+import { LIMITS, QUIZ_STATUS, STATUS_LABELS } from '../shared/contracts.js';
 import { h } from '../shared/dom.js';
 
 /**
@@ -20,7 +20,7 @@ export function listView(firstPage, { load, onToggleStatus, onDuplicate }) {
   const { counts } = firstPage;
   const tbody = h('tbody');
   const summary = h('p', { class: 'list-summary', role: 'status' });
-  const search = h('input', { type: 'search', placeholder: 'タイトル・slugで検索', 'aria-label': 'クイズを検索', maxLength: 80 });
+  const search = h('input', { type: 'search', placeholder: 'タイトル・slugで検索', 'aria-label': 'クイズを検索', maxLength: LIMITS.search });
   const filter = h(
     'select',
     { 'aria-label': '状態で絞り込み' },

@@ -10,6 +10,9 @@ export const ADMIN_PAGE_SIZE = 50;
 
 const now = () => new Date().toISOString();
 
+/** 部分一致検索の LIKE パターン。LIKE の特殊文字（% _ \）は文字そのものとして検索する（ESCAPE '\' と組で使う）。 */
+const likePattern = keyword => (keyword ? `%${keyword.replace(/[\\%_]/g, char => `\\${char}`)}%` : null);
+
 /* ───────────── 読み取り ───────────── */
 
 /**
@@ -17,24 +20,26 @@ const now = () => new Date().toISOString();
  *
  * after は前ページ最後の { publishedAt, slug }。OFFSET を使わないので、ページが進んでも
  * 速度が落ちず、途中で公開・非公開が変わっても重複や取りこぼしが起きにくい。
- * 同じ公開日時のクイズは slug で順序を一意にする。
+ * 同じ公開日時のクイズは slug で順序を一意にする。keyword はタイトル・説明の部分一致で、total も絞り込み後の件数。
  *
  * @returns {Promise<{ quizzes: object[], total: number, next: { publishedAt: string, slug: string } | null }>}
  */
-export async function listPublishedQuizzes(db, { after = null, limit = PUBLIC_PAGE_SIZE } = {}) {
+export async function listPublishedQuizzes(db, { keyword = '', after = null, limit = PUBLIC_PAGE_SIZE } = {}) {
+  const pattern = likePattern(keyword);
+  const filter = `status = ?1 AND (?2 IS NULL OR title LIKE ?2 ESCAPE '\\' OR description LIKE ?2 ESCAPE '\\')`;
   const [page, count] = await db.batch([
     db
       .prepare(
         `SELECT slug, title, description, time_limit_seconds, published_at,
                 (SELECT COUNT(*) FROM questions WHERE quiz_id = quizzes.id) AS question_count
            FROM quizzes
-          WHERE status = ?1
-            AND (?2 IS NULL OR published_at < ?2 OR (published_at = ?2 AND slug < ?3))
+          WHERE ${filter}
+            AND (?3 IS NULL OR published_at < ?3 OR (published_at = ?3 AND slug < ?4))
           ORDER BY published_at DESC, slug DESC
-          LIMIT ?4`
+          LIMIT ?5`
       )
-      .bind(QUIZ_STATUS.PUBLISHED, after?.publishedAt ?? null, after?.slug ?? null, limit + 1),
-    db.prepare('SELECT COUNT(*) AS n FROM quizzes WHERE status = ?1').bind(QUIZ_STATUS.PUBLISHED)
+      .bind(QUIZ_STATUS.PUBLISHED, pattern, after?.publishedAt ?? null, after?.slug ?? null, limit + 1),
+    db.prepare(`SELECT COUNT(*) AS n FROM quizzes WHERE ${filter}`).bind(QUIZ_STATUS.PUBLISHED, pattern)
   ]);
   const rows = page.results.slice(0, limit);
   const last = rows.at(-1);
@@ -60,8 +65,7 @@ export async function listPublishedQuizzes(db, { after = null, limit = PUBLIC_PA
  * @returns {Promise<{ quizzes: object[], total: number, counts: Record<string, number>, next: { updatedAt: string, id: string } | null }>}
  */
 export async function listAllQuizzes(db, { status = null, keyword = '', after = null, limit = ADMIN_PAGE_SIZE } = {}) {
-  // LIKE の特殊文字（% _ \）は文字そのものとして検索する。
-  const pattern = keyword ? `%${keyword.replace(/[\\%_]/g, char => `\\${char}`)}%` : null;
+  const pattern = likePattern(keyword);
   const filter = `(?1 IS NULL OR status = ?1) AND (?2 IS NULL OR title LIKE ?2 ESCAPE '\\' OR slug LIKE ?2 ESCAPE '\\')`;
   const [page, matching, byStatus] = await db.batch([
     db

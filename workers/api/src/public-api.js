@@ -1,4 +1,4 @@
-import { SLUG_PATTERN } from '../../../packages/shared/src/contracts.js';
+import { LIMITS, SLUG_PATTERN } from '../../../packages/shared/src/contracts.js';
 import { issueSession, verifySession } from './attempt-session.js';
 import { decodeCursor as decodeListCursor, encodeCursor as encodeListCursor, isTimestamp } from './cursor.js';
 import { HttpError, cacheableJson, json, readJson } from './http.js';
@@ -29,9 +29,13 @@ export function decodeCursor(cursor) {
   return { publishedAt, slug };
 }
 
+/** 公開一覧。?q= でタイトル・説明を検索、?cursor= で続きのページ。 */
 async function listQuizzes(request, { env, cors }) {
-  const cursor = new URL(request.url).searchParams.get('cursor');
-  const { quizzes, total, next } = await listPublishedQuizzes(env.DB, { after: cursor ? decodeCursor(cursor) : null });
+  const params = new URL(request.url).searchParams;
+  const cursor = params.get('cursor');
+  const keyword = (params.get('q') ?? '').trim();
+  if (Array.from(keyword).length > LIMITS.search) throw new HttpError(400, 'invalid_search');
+  const { quizzes, total, next } = await listPublishedQuizzes(env.DB, { keyword, after: cursor ? decodeCursor(cursor) : null });
   return cacheableJson(request, { quizzes, total, nextCursor: next ? encodeCursor(next) : null }, { cacheControl: PUBLIC_CACHE, headers: cors });
 }
 

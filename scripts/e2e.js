@@ -169,6 +169,38 @@ for (const [name, options] of [
     });
   }
 
+  // 一覧の検索: 画面を作り直さず一覧だけが変わり、検索語は URL に残る（再読み込み・戻るで同じ結果）
+  if (name === 'desktop') {
+    const searchbox = page.getByRole('searchbox', { name: 'クイズを検索' });
+    const listCount = () => page.locator('.quiz-list > li').count();
+    await searchbox.fill(title);
+    await searchbox.press('Enter');
+    await page.getByText(`「${title}」の検索結果: 1件`).waitFor();
+    assert.equal(await listCount(), 1);
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('name')), 'q', 'フォーカスは入力欄のまま');
+    assert.equal(new URLSearchParams(await page.evaluate(() => location.hash.split('?')[1])).get('q'), title);
+
+    await page.reload();
+    await page.getByRole('heading', { name: '公開中のクイズ' }).waitFor();
+    assert.equal(await searchbox.inputValue(), title);
+    assert.equal(await listCount(), 1);
+
+    await searchbox.fill('どこにもない言葉');
+    await searchbox.press('Enter');
+    await page.getByText('「どこにもない言葉」に一致するクイズはありません。').waitFor();
+    assert.equal(await page.locator('.quiz-list').isHidden(), true);
+    await shot(page, 'web-desktop-search-empty');
+
+    await page.goBack();
+    await page.getByRole('link', { name: new RegExp(title) }).waitFor();
+    assert.equal(await searchbox.inputValue(), title);
+
+    await searchbox.fill('');
+    await searchbox.press('Enter');
+    await page.getByText(/すべてのクイズ: \d+件/).waitFor();
+    assert.ok((await listCount()) > 1);
+  }
+
   await page.getByRole('link', { name: new RegExp(title) }).click();
   await page.getByRole('button', { name: 'はじめる' }).click();
   await page.getByRole('heading', { name: '空の色は？' }).waitFor();

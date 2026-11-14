@@ -29,7 +29,6 @@ export function slugFor(title, id) {
   return base ? `${base}-${suffix}` : `quiz-${suffix}`;
 }
 
-const SEARCH_MAX_LENGTH = 80;
 /** @type {readonly string[]} */
 const STATUSES = Object.values(QUIZ_STATUS);
 const isQuizId = value => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value);
@@ -40,7 +39,7 @@ async function list(request, { env }) {
   const status = params.get('status') || null;
   if (status !== null && !STATUSES.includes(status)) throw new HttpError(400, 'invalid_status');
   const keyword = (params.get('q') ?? '').trim();
-  if (Array.from(keyword).length > SEARCH_MAX_LENGTH) throw new HttpError(400, 'invalid_search');
+  if (Array.from(keyword).length > LIMITS.search) throw new HttpError(400, 'invalid_search');
   const cursor = params.get('cursor');
   const after = cursor ? decodeCursor(cursor, ([time, id]) => isTimestamp(time) && isQuizId(id)) : null;
 

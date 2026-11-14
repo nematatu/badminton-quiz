@@ -33,6 +33,8 @@ export const LIMITS = Object.freeze({
   option: 160,
   explanation: 500,
   questions: 50,
+  /** 一覧の検索語（文字数） */
+  search: 80,
   timeLimitSeconds: Object.freeze({ min: 10, max: 3600 })
 });
 
