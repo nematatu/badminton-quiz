@@ -2,8 +2,8 @@ import { errorMessage } from '../shared/contracts.js';
 import { copyText, createToast, installSkipLink, mount } from '../shared/dom.js';
 import { fetchQuiz, fetchQuizzes, startSession, submitAttempt } from './api.js';
 import { loadRecord, saveRecord } from './records.js';
-import { QuizSession, formatDuration, shareText } from './session.js';
-import { errorView, homeView, introView, loadingView, questionView, resultView } from './views.js';
+import { PracticeSession, QuizSession, formatDuration, shareText } from './session.js';
+import { errorView, homeView, introView, loadingView, practiceDoneView, practiceView, questionView, resultView } from './views.js';
 
 /**
  * 公開画面のコントローラー。URL の hash で画面を決め、状態遷移とタイマーを管理する。
@@ -149,16 +149,7 @@ async function finish(timedOut) {
     current.status = 'finished';
     const progress = saveRecord(current.quiz.slug, result);
     announce(`採点結果: ${result.total}問中${result.score}問正解${progress.isNewBest ? '。自己ベスト更新' : ''}`);
-    mount(
-      root,
-      resultView(current, result, {
-        shareUrl: shareUrl(current.quiz.slug),
-        onShare: navigator.share ? () => shareResult(current.quiz, result) : null,
-        onCopy: async () => notify((await copyText(shareUrl(current.quiz.slug))) ? 'リンクをコピーしました' : 'コピーできませんでした。アドレスバーのURLをご利用ください'),
-        onRetry: () => start(current.quiz),
-        progress
-      })
-    );
+    showResult(current, result, progress);
   } catch (error) {
     if (session !== current) return;
     if (RESTART_REQUIRED.has(error.code)) {
@@ -169,6 +160,58 @@ async function finish(timedOut) {
     current.status = 'playing';
     showError(error, () => finish(timedOut), { title: '採点できませんでした', retryLabel: 'もう一度送信する' });
   }
+}
+
+function showResult(current, result, progress) {
+  mount(
+    root,
+    resultView(current, result, {
+      shareUrl: shareUrl(current.quiz.slug),
+      onShare: navigator.share ? () => shareResult(current.quiz, result) : null,
+      onCopy: async () => notify((await copyText(shareUrl(current.quiz.slug))) ? 'リンクをコピーしました' : 'コピーできませんでした。アドレスバーのURLをご利用ください'),
+      onRetry: () => start(current.quiz),
+      onPractice: result.score < result.total ? () => practice(new PracticeSession(current.quiz, result), () => showResult(current, result, progress)) : null,
+      progress
+    })
+  );
+}
+
+/**
+ * 間違えた問題の復習。サーバーには何も送らない。
+ * @param {PracticeSession} state
+ * @param {() => void} backToResult 結果画面に戻る
+ */
+function practice(state, backToResult) {
+  const quiz = state.quiz;
+  const render = () =>
+    mount(
+      root,
+      practiceView(state, {
+        onSelect: optionIndex => state.select(optionIndex),
+        onCheck: () => {
+          state.check();
+          render();
+          // 正誤は role=status で読み上げられる。続けて操作できるよう「次へ」にフォーカスを移す。
+          /** @type {HTMLElement | null} */ (root.querySelector('[data-practice-next]'))?.focus();
+        },
+        onNext: () => {
+          if (!state.isLast) {
+            state.next();
+            return render();
+          }
+          mount(
+            root,
+            practiceDoneView(state, {
+              onAgain: () => practice(new PracticeSession(quiz, state.remainingResult), backToResult),
+              onRetry: () => start(quiz),
+              onExit: backToResult
+            })
+          );
+        },
+        onExit: backToResult
+      })
+    );
+  render();
 }
 
 /** 端末の共有メニュー（LINE・メール等）を開く。利用者が閉じた場合（AbortError）は何もしない。 */

@@ -204,7 +204,7 @@ export function questionView(session, { onSelect, onNext, onPrevious }) {
  * 結果画面。onShare は端末の共有メニュー（Web Share API）を開く関数。
  * 対応していないブラウザでは null を渡し、ボタンを出さない。
  */
-export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry, progress = null }) {
+export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry, onPractice = null, progress = null }) {
   const { quiz } = session;
   const message = resultMessage(result.score, result.total);
   // URLSearchParams は空白を + にするため、確実に解釈される %20 形式で組み立てる。
@@ -230,7 +230,14 @@ export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry
         onShare && h('button', { type: 'button', class: 'button ghost', onclick: onShare }, 'ほかのアプリで共有'),
         h('button', { type: 'button', class: 'button ghost', onclick: onCopy }, 'リンクをコピー'),
         h('button', { type: 'button', class: 'button ghost', onclick: onRetry }, 'もう一度挑戦')
-      )
+      ),
+      onPractice &&
+        h(
+          'p',
+          { class: 'practice-cta' },
+          h('button', { type: 'button', class: 'button', onclick: onPractice }, `間違えた ${result.total - result.score} 問を復習する`),
+          h('span', { class: 'practice-note' }, '記録には残りません')
+        )
     ),
     h('h2', { class: 'review-title' }, '答え合わせ'),
     h(
@@ -254,5 +261,103 @@ export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry
       })
     ),
     h('div', { class: 'actions center' }, h('a', { class: 'button ghost', href: '#/' }, 'ほかのクイズを見る'))
+  );
+}
+
+/**
+ * 間違えた問題の復習画面（1 問ずつ、確かめるとすぐに正誤と解説が出る）。
+ * 確かめた後は選択肢を固定し、結果を読み上げてから「次へ」にフォーカスを移す。
+ * @param {import('./session.js').PracticeSession} practice
+ */
+export function practiceView(practice, { onSelect, onCheck, onNext, onExit }) {
+  const { item, checked } = practice;
+  const { question } = item;
+  const nextLabel = practice.isLast ? '復習を終える' : '次の問題へ';
+
+  const feedback =
+    checked &&
+    h(
+      'div',
+      { class: `practice-feedback ${practice.isCorrect ? 'is-correct' : 'is-wrong'}`, role: 'status' },
+      h('p', { class: 'review-head' }, h('span', { class: 'badge' }, practice.isCorrect ? '正解' : '不正解'), !practice.isCorrect && h('span', null, `正解は ${LETTERS[item.correctIndex]}. ${question.options[item.correctIndex]}`)),
+      item.explanation && h('p', { class: 'explanation' }, item.explanation)
+    );
+
+  const actionButton = checked
+    ? h('button', { type: 'button', class: 'button', 'data-practice-next': '', onclick: onNext }, nextLabel)
+    : h('button', { type: 'submit', class: 'button', disabled: practice.selected === null }, '答えを確かめる');
+
+  const form = h(
+    'form',
+    {
+      class: 'card question-card',
+      onsubmit: event => {
+        event.preventDefault();
+        if (!practice.checked && practice.selected !== null) onCheck();
+      },
+      onchange: event => {
+        if (event.target.name !== 'answer') return;
+        onSelect(Number(event.target.value));
+        if (actionButton instanceof HTMLButtonElement && actionButton.type === 'submit') actionButton.disabled = false;
+      }
+    },
+    h(
+      'fieldset',
+      { disabled: checked },
+      h('legend', { class: 'question-label' }, h('span', null, '復習'), h('span', null, `第${item.number + 1}問`)),
+      h('h1', { class: 'question-title' }, question.prompt),
+      h(
+        'div',
+        { class: 'answers' },
+        question.options.map((option, optionIndex) =>
+          h(
+            'label',
+            {
+              class: ['answer', checked && optionIndex === item.correctIndex && 'is-answer', checked && optionIndex === practice.selected && optionIndex !== item.correctIndex && 'is-mistake']
+                .filter(Boolean)
+                .join(' ')
+            },
+            h('input', { type: 'radio', name: 'answer', value: String(optionIndex), checked: practice.selected === optionIndex }),
+            h('span', { class: 'answer-key', 'aria-hidden': 'true' }, LETTERS[optionIndex]),
+            h('span', { class: 'answer-text' }, option),
+            // 色だけに頼らず、どれが正解でどれを選んだかを文字でも示す
+            checked && optionIndex === item.correctIndex && h('span', { class: 'answer-mark' }, '正解'),
+            checked && optionIndex === practice.selected && optionIndex !== item.correctIndex && h('span', { class: 'answer-mark' }, 'あなたの回答')
+          )
+        )
+      )
+    ),
+    feedback,
+    h('div', { class: 'question-actions' }, h('button', { type: 'button', class: 'button ghost', onclick: onExit }, '結果に戻る'), actionButton)
+  );
+
+  return h(
+    'section',
+    { class: 'narrow' },
+    h('div', { class: 'progress-row' }, h('span', { class: 'progress-count' }, `復習 ${practice.index + 1} / ${practice.total}`)),
+    form
+  );
+}
+
+/** 復習の終わり。まだ間違えた問題があれば、それだけをもう一度復習できる。 */
+export function practiceDoneView(practice, { onAgain, onExit, onRetry }) {
+  const remaining = practice.total - practice.score;
+  return h(
+    'section',
+    { class: 'narrow result' },
+    h(
+      'div',
+      { class: 'card result-card' },
+      h('p', { class: 'eyebrow' }, practice.quiz.title),
+      h('p', { class: 'score' }, h('strong', null, practice.score), h('span', null, ` / ${practice.total}問`)),
+      h('h1', null, remaining ? `復習おつかれさまでした。あと ${remaining} 問です。` : '復習した問題をすべて正解しました！'),
+      h(
+        'div',
+        { class: 'actions center' },
+        remaining > 0 && h('button', { type: 'button', class: 'button', onclick: onAgain }, `間違えた ${remaining} 問をもう一度`),
+        h('button', { type: 'button', class: remaining ? 'button ghost' : 'button', onclick: onRetry }, 'もう一度挑戦（記録に残る）'),
+        h('button', { type: 'button', class: 'button ghost', onclick: onExit }, '結果に戻る')
+      )
+    )
   );
 }

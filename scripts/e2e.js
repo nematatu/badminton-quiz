@@ -218,6 +218,31 @@ for (const [name, options] of [
   }
   await shot(page, `web-${name}-result`);
 
+  // 間違えた問題だけを復習できる（ブラウザの中だけで進み、回答数には数えない）
+  if (name === 'mobile') {
+    await page.getByRole('button', { name: '間違えた 1 問を復習する' }).click();
+    await page.getByRole('heading', { name: '1 + 1 は？' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '答えを確かめる' }).isDisabled(), true);
+    await page.getByText('3', { exact: true }).click();
+    await page.getByRole('button', { name: '答えを確かめる' }).click();
+    await page.getByRole('status').filter({ hasText: '不正解' }).waitFor();
+    assert.match(await page.getByRole('status').filter({ hasText: '不正解' }).innerText(), /正解は B\. 2/);
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), '復習を終える', '確かめた後は「次へ」にフォーカスが移る');
+    assert.equal(await page.locator('input[name="answer"]:not(:disabled)').count(), 0, '確かめた後は答えを変えられない');
+    await shot(page, 'web-mobile-practice-checked');
+    await page.getByRole('button', { name: '復習を終える' }).click();
+    await page.getByRole('heading', { name: '復習おつかれさまでした。あと 1 問です。' }).waitFor();
+    await page.getByRole('button', { name: '間違えた 1 問をもう一度' }).click();
+    await page.getByText('2', { exact: true }).click();
+    await page.getByRole('button', { name: '答えを確かめる' }).click();
+    await page.getByRole('status').filter({ hasText: '正解' }).waitFor();
+    await page.getByRole('button', { name: '復習を終える' }).click();
+    await page.getByRole('heading', { name: '復習した問題をすべて正解しました！' }).waitFor();
+    await shot(page, 'web-mobile-practice-done');
+    await page.getByRole('button', { name: '結果に戻る' }).click();
+    assert.match(await page.locator('.score').innerText(), /1\s*\/\s*2問正解/);
+  }
+
   // もう一度挑戦して全問正解すると自己ベスト更新を知らせ、導入画面に前回・自己ベストが出る（このブラウザの記録）
   if (name === 'desktop') {
     await page.getByRole('button', { name: 'もう一度挑戦' }).click();
