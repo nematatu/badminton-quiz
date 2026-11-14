@@ -137,6 +137,7 @@ function assemble(row, questionRows) {
     title: row.title,
     description: row.description,
     timeLimitSeconds: row.time_limit_seconds,
+    shuffleOptions: row.shuffle_options === 1,
     status: row.status,
     version: row.version,
     contentVersion: row.content_version,
@@ -152,14 +153,19 @@ function assemble(row, questionRows) {
   };
 }
 
-/** 回答者へ渡してよい形。正解・解説・内部IDは含めない。 */
-export function toPublicQuiz(quiz) {
+/**
+ * 回答者へ渡してよい形。正解・解説・内部IDは含めない。
+ * orders（shuffle.js）を渡すと、各問の選択肢をその順番に並べ替える（order[表示位置] = 元の位置）。
+ * @param {object} quiz
+ * @param {number[][] | null} [orders]
+ */
+export function toPublicQuiz(quiz, orders = null) {
   return {
     slug: quiz.slug,
     title: quiz.title,
     description: quiz.description,
     timeLimitSeconds: quiz.timeLimitSeconds,
-    questions: quiz.questions.map(({ prompt, options }) => ({ prompt, options }))
+    questions: quiz.questions.map(({ prompt, options }, index) => ({ prompt, options: orders ? orders[index].map(original => options[original]) : options }))
   };
 }
 
@@ -201,10 +207,10 @@ export async function createQuiz(db, { input, slug, actor, duplicatedFrom = null
   await db.batch([
     db
       .prepare(
-        `INSERT INTO quizzes (id, slug, title, description, time_limit_seconds, status, created_by, created_at, updated_at, version, revision_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, 1, ?9)`
+        `INSERT INTO quizzes (id, slug, title, description, time_limit_seconds, shuffle_options, status, created_by, created_at, updated_at, version, revision_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, 1, ?10)`
       )
-      .bind(id, slug(id), input.title, input.description, input.timeLimitSeconds, QUIZ_STATUS.DRAFT, actor, timestamp, crypto.randomUUID()),
+      .bind(id, slug(id), input.title, input.description, input.timeLimitSeconds, input.shuffleOptions ? 1 : 0, QUIZ_STATUS.DRAFT, actor, timestamp, crypto.randomUUID()),
     ...input.questions.map(question => insertQuestion(db, id, question)),
     insertAudit(db, { actor, action: 'quiz.create', quizId: id, metadata: { title: input.title, ...(duplicatedFrom ? { duplicatedFrom } : {}) } })
   ]);
@@ -226,11 +232,11 @@ export async function updateQuiz(db, { id, version, input, actor }) {
     db
       .prepare(
         `UPDATE quizzes
-            SET title = ?1, description = ?2, time_limit_seconds = ?3, updated_at = ?4,
+            SET title = ?1, description = ?2, time_limit_seconds = ?3, shuffle_options = ?8, updated_at = ?4,
                 version = version + 1, content_version = content_version + 1, revision_id = ?5
           WHERE id = ?6 AND version = ?7`
       )
-      .bind(input.title, input.description, input.timeLimitSeconds, now(), guard, id, version),
+      .bind(input.title, input.description, input.timeLimitSeconds, now(), guard, id, version, input.shuffleOptions ? 1 : 0),
     db.prepare('DELETE FROM questions WHERE quiz_id = ?1 AND EXISTS (SELECT 1 FROM quizzes WHERE id = ?1 AND revision_id = ?2)').bind(id, guard),
     ...input.questions.map(question => insertQuestion(db, id, question, guard)),
     insertAudit(db, { actor, action: 'quiz.update', quizId: id, metadata: { fromVersion: version }, guard })

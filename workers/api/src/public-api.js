@@ -5,6 +5,7 @@ import { HttpError, cacheableJson, json, readJson } from './http.js';
 import { enforceAttemptRateLimit } from './rate-limit.js';
 import { findPublishedQuizBySlug, listPublishedQuizzes, recordAttempt, toPublicQuiz } from './repository.js';
 import { createRouter } from './router.js';
+import { optionOrders } from './shuffle.js';
 import { validateAnswers } from './validation.js';
 
 /**
@@ -52,7 +53,9 @@ async function startSession(request, { env, cors, params }) {
   await enforceAttemptRateLimit(request, env, `${params.slug}:start`);
   const quiz = await findPublishedQuizBySlug(env.DB, params.slug);
   if (!quiz) throw new HttpError(404, 'not_found');
-  return json({ ...(await issueSession(env, quiz)), quiz: toPublicQuiz(quiz) }, { status: 201, headers: cors });
+  const { token, expiresAt, sessionId, shuffle } = await issueSession(env, quiz);
+  const orders = shuffle ? await optionOrders(sessionId, quiz.questions.length) : null;
+  return json({ token, expiresAt, quiz: toPublicQuiz(quiz, orders) }, { status: 201, headers: cors });
 }
 
 /**
@@ -67,12 +70,18 @@ async function submitAttempt(request, { env, cors, params }) {
   const quiz = await findPublishedQuizBySlug(env.DB, params.slug);
   if (!quiz) throw new HttpError(404, 'not_found');
 
-  const sessionId = await verifySession(env, body?.token, quiz);
+  const { sessionId, shuffle } = await verifySession(env, body?.token, quiz);
   const { answers } = validateAnswers(body, quiz.questions.length);
+  // 回答は「見せた順番」での位置。入れ替えて出題した場合は元の位置に戻して採点・記録する
+  // （記録と集計は常に元の位置なので、入れ替えの有無に関係なく同じ意味になる）。
+  const orders = shuffle ? await optionOrders(sessionId, quiz.questions.length) : null;
+  const toOriginal = (index, answer) => (orders && answer >= 0 ? orders[index][answer] : answer);
+  const toDisplayed = (index, original) => (orders ? orders[index].indexOf(original) : original);
+  const originalAnswers = answers.map((answer, index) => toOriginal(index, answer));
   const details = quiz.questions.map((question, index) => ({
     selectedIndex: answers[index],
-    correctIndex: question.correctIndex,
-    correct: answers[index] === question.correctIndex,
+    correctIndex: toDisplayed(index, question.correctIndex),
+    correct: originalAnswers[index] === question.correctIndex,
     explanation: question.explanation
   }));
   const score = details.filter(detail => detail.correct).length;
@@ -84,7 +93,7 @@ async function submitAttempt(request, { env, cors, params }) {
     contentVersion: quiz.contentVersion,
     score,
     total: details.length,
-    answers,
+    answers: originalAnswers,
     correct: details.map(detail => detail.correct)
   });
   if (!recorded) throw new HttpError(409, 'attempt_already_submitted');

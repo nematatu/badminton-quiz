@@ -26,6 +26,7 @@ export function openPreview(data) {
     ),
     h('p', { class: 'muted' }, describeQuiz({ questionCount, timeLimitSeconds: data.timeLimitSeconds })),
     data.description.trim() && h('p', null, data.description.trim()),
+    data.shuffleOptions && h('p', { class: 'notice' }, '回答者には、選択肢が挑戦ごとに入れ替わった順番で表示されます（ここでは入力した順番です）。'),
     h(
       'ol',
       { class: 'preview-questions' },

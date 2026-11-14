@@ -66,7 +66,10 @@ export function validateQuizInput(input) {
   const questions = input.questions;
   if (!Array.isArray(questions) || questions.length < 1 || questions.length > LIMITS.questions) throw invalid('invalid_question_count');
 
-  return { title, description, timeLimitSeconds, questions: questions.map(question) };
+  // 選択肢の順番を挑戦ごとに入れ替えるか。真偽値の true のときだけ有効（既定は入れ替えない）
+  const shuffleOptions = input.shuffleOptions === true;
+
+  return { title, description, timeLimitSeconds, shuffleOptions, questions: questions.map(question) };
 }
 
 /** 楽観的ロック用の version。 */

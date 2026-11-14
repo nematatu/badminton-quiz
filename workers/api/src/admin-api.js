@@ -116,6 +116,7 @@ async function duplicate(_request, { env, identity, params }) {
     title: copyTitle(source.title),
     description: source.description,
     timeLimitSeconds: source.timeLimitSeconds,
+    shuffleOptions: source.shuffleOptions,
     questions: source.questions.map(({ prompt, options, correctIndex, explanation }, position) => ({ position, prompt, options, correctIndex, explanation }))
   };
   const id = await createQuiz(env.DB, { input, actor: identity.actor, slug: quizId => slugFor(input.title, quizId), duplicatedFrom: source.id });

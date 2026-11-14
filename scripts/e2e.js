@@ -327,6 +327,10 @@ for (const [name, options] of [
   assert.equal(await page.locator('[data-question]').nth(0).getByLabel('選択肢2を正解にする').isChecked(), true);
   assert.equal(await page.locator('[data-question]').nth(1).getByLabel('問題文').inputValue(), 'カンマ, を含む問題');
   await shot(page, 'admin-csv-imported');
+  // 選択肢の入れ替えは既定で切（順番に意味がある選択肢を壊さない）。説明が結び付いている
+  const shuffle = page.getByRole('checkbox', { name: '選択肢の順番を挑戦ごとに入れ替える' });
+  assert.equal(await shuffle.isChecked(), false);
+  assert.match(await shuffle.getAttribute('aria-describedby'), /-hint$/);
 
   // ヘッドレス Chromium は日本語のファイル名を download に置き換えるため、E2E では英数字のタイトルで確かめる
   await page.getByLabel('タイトル').fill('CSV round/trip');
