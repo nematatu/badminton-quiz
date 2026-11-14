@@ -95,7 +95,10 @@ export function homeView(page, { loadMore }) {
   ];
 }
 
-export function introView(quiz, { onStart }) {
+/**
+ * 導入画面。record はこのブラウザでの前回・自己ベスト（無ければ null）。
+ */
+export function introView(quiz, { onStart, record = null }) {
   return h(
     'section',
     { class: 'narrow' },
@@ -106,6 +109,13 @@ export function introView(quiz, { onStart }) {
       h('p', { class: 'eyebrow' }, describeQuiz({ questionCount: quiz.questions.length, timeLimitSeconds: quiz.timeLimitSeconds })),
       h('h1', null, quiz.title),
       quiz.description && h('p', { class: 'lead' }, quiz.description),
+      record &&
+        h(
+          'p',
+          { class: 'record' },
+          `前回 ${record.last} / ${record.total}問正解・自己ベスト ${record.best} / ${record.total}問`,
+          record.plays > 1 && `（${record.plays}回挑戦）`
+        ),
       quiz.timeLimitSeconds && h('p', { class: 'notice' }, '「はじめる」を押すとタイマーが動き出します。時間切れになると、その時点の回答で採点されます。'),
       h('button', { type: 'button', class: 'button wide', onclick: onStart }, 'はじめる')
     )
@@ -194,7 +204,7 @@ export function questionView(session, { onSelect, onNext, onPrevious }) {
  * 結果画面。onShare は端末の共有メニュー（Web Share API）を開く関数。
  * 対応していないブラウザでは null を渡し、ボタンを出さない。
  */
-export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry }) {
+export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry, progress = null }) {
   const { quiz } = session;
   const message = resultMessage(result.score, result.total);
   // URLSearchParams は空白を + にするため、確実に解釈される %20 形式で組み立てる。
@@ -211,6 +221,8 @@ export function resultView(session, result, { shareUrl, onShare, onCopy, onRetry
       h('p', { class: 'eyebrow' }, quiz.title),
       h('p', { class: 'score' }, h('strong', null, result.score), h('span', null, ` / ${result.total}問正解`)),
       h('h1', null, message),
+      progress?.isNewBest && h('p', { class: 'new-best' }, `自己ベスト更新！（前回までのベスト ${progress.previous.best}問）`),
+      progress && !progress.isNewBest && progress.previous && h('p', { class: 'muted' }, `自己ベスト ${progress.record?.best ?? progress.previous.best} / ${result.total}問`),
       h(
         'div',
         { class: 'actions center' },
