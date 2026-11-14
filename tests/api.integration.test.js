@@ -366,6 +366,7 @@ describe('管理API（AdminApi エントリポイント）', () => {
     const [sample] = body.quizzes;
     assert.equal(sample.slug, SEED_SLUG);
     assert.equal(sample.questionCount, 6);
+    assert.equal(typeof sample.attemptCount, 'number');
     assert.equal(sample.version, 1);
 
     // 状態別の件数は、絞り込みに関係なく全体の件数
@@ -476,11 +477,15 @@ describe('管理API（AdminApi エントリポイント）', () => {
       { position: 0, responses: 5, correct: 4 },
       { position: 1, responses: 5, correct: 3 }
     ]);
+    // 管理一覧の「挑戦」は、この集計から現在の内容への挑戦回数を出す
+    const listed = async () => (await admin(`quizzes?q=${encodeURIComponent('みんなの正答率')}`)).body.quizzes.find(item => item.id === quiz.id);
+    assert.equal((await listed()).attemptCount, 5);
 
     // 問題を編集すると新しい版で数え直し、古い版の集計は定期実行で削除される
     const current = await admin(`quizzes/${quiz.id}`);
     await admin(`quizzes/${quiz.id}`, { method: 'PUT', body: { ...sampleQuiz('みんなの正答率'), version: current.body.version } });
     assert.deepEqual(await rates({ answers: [1, 0] }), [null, null]);
+    assert.equal((await listed()).attemptCount, 1, '編集後は新しい内容への挑戦だけを数える');
     await purgeExpiredAttempts({ DB: db });
     const left = await db.prepare('SELECT content_version, responses FROM question_stats WHERE quiz_id = ?1 ORDER BY position').bind(quiz.id).all();
     const { content_version: latest } = await db.prepare('SELECT content_version FROM quizzes WHERE id = ?1').bind(quiz.id).first();
