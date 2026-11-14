@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { outdatedFiles } from '../scripts/sync-shared.js';
-import { QuizSession, describeQuiz, formatDuration, resultMessage, shareText } from '../apps/web/public/js/session.js';
+import { describeQuiz } from '../packages/shared/src/contracts.js';
+import { QuizSession, formatDuration, resultMessage, shareText } from '../apps/web/public/js/session.js';
 
 const quiz = { slug: 's', title: 'T', timeLimitSeconds: 30, questions: [{ prompt: 'a', options: ['1', '2', '3', '4'] }, { prompt: 'b', options: ['1', '2', '3', '4'] }] };
 

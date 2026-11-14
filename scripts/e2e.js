@@ -112,6 +112,18 @@ const title = `E2Eクイズ ${Date.now()}`;
   assert.equal(await page.locator('[data-question]').nth(0).getByLabel('問題文').inputValue(), '空の色は？');
   await shot(page, 'admin-editor');
 
+  // 保存前でも、回答者の見え方をプレビューできる（並べ替え後の順番・正解・制限時間）
+  await page.getByRole('button', { name: 'プレビュー' }).click();
+  const preview = page.getByRole('dialog', { name: title });
+  await preview.waitFor();
+  assert.match(await preview.innerText(), /全2問・制限時間1分/);
+  assert.deepEqual(await preview.locator('.preview-prompt').allInnerTexts(), ['空の色は？', '1 + 1 は？']);
+  assert.match(await preview.locator('.preview-question').nth(1).locator('.is-correct').innerText(), /2\s*正解/);
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), '閉じる', '開いたら「閉じる」にフォーカス');
+  await shot(page, 'admin-preview');
+  await page.keyboard.press('Escape');
+  await preview.waitFor({ state: 'detached' });
+
   await page.getByRole('button', { name: '下書きとして保存' }).click();
   await page.getByRole('link', { name: title }).waitFor();
   // 保存したら下書きは消える

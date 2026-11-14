@@ -80,6 +80,19 @@ export const QUESTION_FIELD_MESSAGES = Object.freeze({
   explanation: `解説は${LIMITS.explanation}文字以内で入力してください。`
 });
 
+/** 一覧や導入画面向けの「全5問・制限時間1分30秒」のような説明。 */
+export function describeQuiz({ questionCount, timeLimitSeconds }) {
+  const parts = [`全${questionCount}問`];
+  if (timeLimitSeconds) {
+    const minutes = Math.floor(timeLimitSeconds / 60);
+    const seconds = timeLimitSeconds % 60;
+    parts.push(`制限時間${minutes ? `${minutes}分` : ''}${seconds ? `${seconds}秒` : ''}`);
+  } else {
+    parts.push('時間制限なし');
+  }
+  return parts.join('・');
+}
+
 export function errorMessage(code) {
   return ERROR_MESSAGES[code] ?? ERROR_MESSAGES.internal_error;
 }
