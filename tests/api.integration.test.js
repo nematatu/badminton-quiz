@@ -90,6 +90,9 @@ describe('公開API', () => {
     assert.equal(quiz.questions.length, 6);
     assert.deepEqual(Object.keys(quiz.questions[0]).sort(), ['options', 'prompt']);
     assert.equal(quiz.id, undefined);
+    // 導入画面用に、これまでの挑戦回数と選択肢の入れ替えの有無を返す
+    assert.equal(typeof quiz.playCount, 'number');
+    assert.equal(quiz.shuffleOptions, false);
 
     const etag = response.headers.get('ETag');
     assert.ok(etag);
@@ -524,6 +527,9 @@ describe('管理API（AdminApi エントリポイント）', () => {
       assert.deepEqual(result.details.map(detail => detail.selectedIndex), [correctShown[0], wrongShown]);
     }
     assert.ok(orders.size > 1, '挑戦ごとに並び順が変わる');
+    const intro = await (await publicFetch(`/v1/quizzes/${slug}`)).json();
+    assert.equal(intro.shuffleOptions, true, '導入画面で入れ替わることを伝えられる');
+    assert.equal(intro.playCount, 8, 'これまでの挑戦回数');
 
     // 記録は元の位置（分析の選択肢分布が入れ替えの有無に関係なく正しい）
     const { body: stats } = await admin(`quizzes/${quiz.id}/stats`);

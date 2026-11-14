@@ -50,7 +50,7 @@ Internet
 |---|---|---|---|
 | GET | `/health` | ヘルスチェック | no-cache |
 | GET | `/v1/quizzes?q=&cursor=` | 公開クイズ一覧を新しい順に 30 件ずつ（`{ quizzes, total, nextCursor }`。キーセット方式）。`q` でタイトル・説明を部分一致検索（80 文字まで、`total` は絞り込み後の件数） | 30 秒 + ETag |
-| GET | `/v1/quizzes/:slug` | 問題（正解・解説なし） | 30 秒 + ETag |
+| GET | `/v1/quizzes/:slug` | 導入画面用のクイズ（正解・解説なし）。これまでの挑戦回数 `playCount`、選択肢を入れ替えるか `shuffleOptions` | 30 秒 + ETag |
 | POST | `/v1/quizzes/:slug/sessions` | 挑戦の開始。受付トークンと、同じ版の問題（正解なし）を返す | no-store |
 | POST | `/v1/quizzes/:slug/attempts` | `{ token, answers, timedOut }` を採点（トークン 1 つにつき 1 回）。各問の正解・解説と、みんなの正答率 `correctRate`（回答 5 件未満は `null`） | no-store |
 

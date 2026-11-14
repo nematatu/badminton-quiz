@@ -114,9 +114,10 @@ export async function listAllQuizzes(db, { status = null, keyword = '', after = 
 /**
  * 公開中のクイズを正解込みで 1 往復で読む。公開APIへ返す前に必ず
  * `toPublicQuiz` で正解と解説を取り除くこと。
+ * withPlayCount なら、これまでの挑戦回数（保持期間内の attempts の件数）も同じ往復で数える。
  */
-export async function findPublishedQuizBySlug(db, slug) {
-  const [quizResult, questionResult] = await db.batch([
+export async function findPublishedQuizBySlug(db, slug, { withPlayCount = false } = {}) {
+  const [quizResult, questionResult, countResult] = await db.batch([
     db.prepare('SELECT * FROM quizzes WHERE slug = ?1 AND status = ?2').bind(slug, QUIZ_STATUS.PUBLISHED),
     db
       .prepare(
@@ -125,9 +126,18 @@ export async function findPublishedQuizBySlug(db, slug) {
           WHERE z.slug = ?1 AND z.status = ?2
           ORDER BY q.position`
       )
-      .bind(slug, QUIZ_STATUS.PUBLISHED)
+      .bind(slug, QUIZ_STATUS.PUBLISHED),
+    ...(withPlayCount
+      ? [
+          db
+            .prepare('SELECT COUNT(*) AS n FROM attempts WHERE quiz_id = (SELECT id FROM quizzes WHERE slug = ?1 AND status = ?2)')
+            .bind(slug, QUIZ_STATUS.PUBLISHED)
+        ]
+      : [])
   ]);
-  return assemble(quizResult.results[0], questionResult.results);
+  const quiz = assemble(quizResult.results[0], questionResult.results);
+  if (quiz && countResult) quiz.playCount = countResult.results[0].n;
+  return quiz;
 }
 
 export async function findQuizById(db, id) {
@@ -174,6 +184,8 @@ export function toPublicQuiz(quiz, orders = null) {
     title: quiz.title,
     description: quiz.description,
     timeLimitSeconds: quiz.timeLimitSeconds,
+    shuffleOptions: Boolean(quiz.shuffleOptions),
+    ...(typeof quiz.playCount === 'number' ? { playCount: quiz.playCount } : {}),
     questions: quiz.questions.map(({ prompt, options }, index) => ({ prompt, options: orders ? orders[index].map(original => options[original]) : options }))
   };
 }

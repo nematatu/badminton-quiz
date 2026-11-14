@@ -42,7 +42,8 @@ async function listQuizzes(request, { env, cors }) {
 
 async function getQuiz(request, { env, cors, params }) {
   assertSlug(params.slug);
-  const quiz = await findPublishedQuizBySlug(env.DB, params.slug);
+  // 導入画面用。これまでの挑戦回数（playCount）と、選択肢を入れ替えるか（shuffleOptions）も返す
+  const quiz = await findPublishedQuizBySlug(env.DB, params.slug, { withPlayCount: true });
   if (!quiz) throw new HttpError(404, 'not_found');
   return cacheableJson(request, toPublicQuiz(quiz), { cacheControl: PUBLIC_CACHE, headers: cors });
 }
