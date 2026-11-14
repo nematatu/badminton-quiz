@@ -94,6 +94,8 @@ Pages の `_headers` は Function のレスポンスに適用されないので�
 
 Cron Trigger（毎日 03:17 UTC）で、`ATTEMPT_RETENTION_DAYS`（既定 365 日）を過ぎた回答記録を削除する。
 設定値が不正な場合は、誤って全件を消さないよう既定値で動く。
+あわせて、問題の編集で使われなくなった版の設問別集計（`question_stats`）を削除する。
+現在の版の集計は回答記録の削除後も残す（「みんなの正答率」は長期の集計。挑戦回数はどの画面も `attempts` から数える）。
 
 エラーは `{ "error": "<code>", "detail"?: {...} }`。コードと日本語メッセージの対応は
 `packages/shared/src/contracts.js` の `ERROR_MESSAGES`。
@@ -102,9 +104,13 @@ Cron Trigger（毎日 03:17 UTC）で、`ATTEMPT_RETENTION_DAYS`（既定 365 �
 
 - 画面はビルド不要の小さな ES Modules。`modulepreload` で読み込みの連鎖を避ける。
 - 公開クイズの取得は D1 batch 1 往復。一覧・並び順に合わせた index。
+- 採点時の「みんなの正答率」は、回答の記録と同じ batch で設問別集計に加算して読み出す（全回答を集計しない）。
+- 管理一覧・導入画面の挑戦回数は `idx_attempts_quiz_content` の索引だけで数える。
+- 一覧の検索はタイトル・説明の部分一致（`LIKE '%…%'`、索引は使わない）。クイズ数が数千件を超えて遅くなったら FTS5 を検討する。
+- 公開画面は `preconnect` で API への接続を JS の読み込みと並行して始める。
 - 公開 GET は ETag による 304。CDN（`s-maxage`）には載せない — 非公開化を即時に反映するため。
   CDN キャッシュを導入する場合は、公開状態の変更時に purge する仕組みを先に作ること。
-- 回答の記録は `ctx.waitUntil` で応答後に行う。
+- 回答の記録は採点結果を返す前に行う（受付トークンの使い回しを一意制約で拒否するため。応答後に回すと同じトークンで何度も採点できてしまう）。
 - GET では `Content-Type` を送らず、CORS preflight を発生させない。preflight 自体も `Access-Control-Max-Age` でキャッシュ。
 
 ## 残っている本番判断
